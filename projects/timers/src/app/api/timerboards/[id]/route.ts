@@ -65,7 +65,7 @@ export async function GET(
         description: userTimerboard.timerboard.description,
         userRole: userTimerboard.role,
       },
-      timers: timers.map(timer => ({
+      timers: timers.map((timer: any) => ({
         id: timer.id,
         structureType: timer.structureType,
         system: timer.system,
