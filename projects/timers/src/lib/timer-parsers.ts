@@ -1,0 +1,226 @@
+// Timer parsing utilities for different structure types
+
+export interface ParsedTimer {
+  structureType: string
+  system: string
+  location: string
+  owner: string
+  expiresAt: Date
+  activeUntil?: Date
+  layer?: string
+}
+
+export function parseOrbitalSkyhook(input: string): ParsedTimer | null {
+  try {
+    // Expected format:
+    // "Orbital Skyhook (F2OY-X IV) [Brave Holdings]
+    // 69 km
+    // Reinforced until 2025.05.04 20:23:01"
+    
+    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    
+    if (lines.length < 3) {
+      throw new Error('Invalid format: Expected at least 3 lines')
+    }
+
+    // Parse first line: "Orbital Skyhook (F2OY-X IV) [Brave Holdings]"
+    const firstLine = lines[0]
+    const skyhookMatch = firstLine.match(/^Orbital Skyhook \(([^)]+)\) \[([^\]]+)\]$/)
+    
+    if (!skyhookMatch) {
+      throw new Error('Invalid first line format')
+    }
+
+    const [, locationPart, owner] = skyhookMatch
+    
+    // Parse system and planet from location (e.g., "F2OY-X IV")
+    const locationMatch = locationPart.match(/^([A-Z0-9\-]+)\s+(.+)$/)
+    if (!locationMatch) {
+      throw new Error('Invalid location format')
+    }
+
+    const [, system, planet] = locationMatch
+
+    // Parse reinforced until line
+    let expiresAt: Date
+    for (const line of lines) {
+      if (line.startsWith('Reinforced until')) {
+        const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
+        if (dateMatch) {
+          // Convert EVE format (2025.05.04 20:23:01) to ISO format
+          const dateStr = dateMatch[1].replace(/\./g, '-')
+          expiresAt = new Date(dateStr + ' UTC')
+          break
+        }
+      }
+    }
+
+    if (!expiresAt) {
+      throw new Error('Could not parse reinforced until date')
+    }
+
+    // Orbital Skyhooks have a 15-minute active window after the timer expires
+    const activeUntil = new Date(expiresAt.getTime() + (15 * 60 * 1000))
+
+    return {
+      structureType: 'ORBITAL_SKYHOOK',
+      system,
+      location: planet,
+      owner,
+      expiresAt,
+      activeUntil,
+    }
+  } catch (error) {
+    console.error('Error parsing Orbital Skyhook:', error)
+    return null
+  }
+}
+
+export function parseJumpBridge(input: string, owner: string): ParsedTimer | null {
+  try {
+    // Expected format:
+    // "EFM-C4 » C-J6MT - Eye Of Terror Mk.VIII
+    // 1,595 m
+    // Reinforced until 2025.08.26 19:16:49"
+    
+    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    
+    if (lines.length < 3) {
+      throw new Error('Invalid format: Expected at least 3 lines')
+    }
+
+    // Parse first line: "EFM-C4 » C-J6MT - Eye Of Terror Mk.VIII"
+    const firstLine = lines[0]
+    const bridgeMatch = firstLine.match(/^([A-Z0-9\-]+)\s+»\s+[A-Z0-9\-]+\s+-\s+(.+)$/)
+    
+    if (!bridgeMatch) {
+      throw new Error('Invalid jump bridge format')
+    }
+
+    const [, system, structureName] = bridgeMatch
+
+    // Parse reinforced until line
+    let expiresAt: Date
+    for (const line of lines) {
+      if (line.startsWith('Reinforced until')) {
+        const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
+        if (dateMatch) {
+          const dateStr = dateMatch[1].replace(/\./g, '-')
+          expiresAt = new Date(dateStr + ' UTC')
+          break
+        }
+      }
+    }
+
+    if (!expiresAt) {
+      throw new Error('Could not parse reinforced until date')
+    }
+
+    // Jump Bridges have a 30-minute active window after the timer expires
+    const activeUntil = new Date(expiresAt.getTime() + (30 * 60 * 1000))
+
+    return {
+      structureType: 'JUMP_BRIDGE',
+      system,
+      location: structureName,
+      owner,
+      expiresAt,
+      activeUntil,
+    }
+  } catch (error) {
+    console.error('Error parsing Jump Bridge:', error)
+    return null
+  }
+}
+
+export function parseMercenaryDen(dateInput: string, system: string, planet: string, owner: string): ParsedTimer | null {
+  try {
+    // Expected format: "2025.08.26 19:16:49"
+    const dateMatch = dateInput.trim().match(/^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})$/)
+    
+    if (!dateMatch) {
+      throw new Error('Invalid date format')
+    }
+
+    const dateStr = dateMatch[1].replace(/\./g, '-')
+    const expiresAt = new Date(dateStr + ' UTC')
+
+    // Mercenary Dens have a 30-minute active window after the timer expires
+    const activeUntil = new Date(expiresAt.getTime() + (30 * 60 * 1000))
+
+    return {
+      structureType: 'MERCENARY_DEN',
+      system,
+      location: planet,
+      owner,
+      expiresAt,
+      activeUntil,
+    }
+  } catch (error) {
+    console.error('Error parsing Mercenary Den:', error)
+    return null
+  }
+}
+
+export function parseOtherStructure(
+  input: string, 
+  structureType: string, 
+  layer: string, 
+  owner: string
+): ParsedTimer | null {
+  try {
+    // Expected format:
+    // "Y-MPWL - Road of Military Parade S
+    // 3,714 km
+    // Reinforced until 2025.08.24 19:25:45"
+    
+    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    
+    if (lines.length < 3) {
+      throw new Error('Invalid format: Expected at least 3 lines')
+    }
+
+    // Parse first line: "Y-MPWL - Road of Military Parade S"
+    const firstLine = lines[0]
+    const structureMatch = firstLine.match(/^([A-Z0-9\-]+)\s+-\s+(.+)$/)
+    
+    if (!structureMatch) {
+      throw new Error('Invalid structure format')
+    }
+
+    const [, system, structureName] = structureMatch
+
+    // Parse reinforced until line
+    let expiresAt: Date
+    for (const line of lines) {
+      if (line.startsWith('Reinforced until')) {
+        const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
+        if (dateMatch) {
+          const dateStr = dateMatch[1].replace(/\./g, '-')
+          expiresAt = new Date(dateStr + ' UTC')
+          break
+        }
+      }
+    }
+
+    if (!expiresAt) {
+      throw new Error('Could not parse reinforced until date')
+    }
+
+    // Other structures have a 15-minute active window after the timer expires
+    const activeUntil = new Date(expiresAt.getTime() + (15 * 60 * 1000))
+
+    return {
+      structureType,
+      system,
+      location: structureName,
+      owner,
+      expiresAt,
+      activeUntil,
+      layer,
+    }
+  } catch (error) {
+    console.error('Error parsing structure:', error)
+    return null
+  }
+}

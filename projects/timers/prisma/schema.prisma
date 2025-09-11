@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for EVE Online characters
+model User {
+  id            String   @id @default(cuid())
+  characterId   Int      @unique
+  characterName String
+  corporationId Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // User roles
+  isAdmin       Boolean  @default(false)
+  
+  // Relations
+  timerboards   UserTimerboard[]
+  addedTimers   Timer[]
+  auditLogs     AuditLog[]
+  
+  @@map("users")
+}
+
+// Timerboard model - groups of timers for organizations
+model Timerboard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  
+  // Relations
+  users       UserTimerboard[]
+  timers      Timer[]
+  auditLogs   AuditLog[]
+  
+  @@map("timerboards")
+}
+
+// Junction table for user-timerboard relationships with roles
+model UserTimerboard {
+  id           String @id @default(cuid())
+  userId       String
+  timerboardId String
+  role         String @default("USER") // USER, MODERATOR
+  joinedAt     DateTime @default(now())
+  
+  // Relations
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timerboard   Timerboard @relation(fields: [timerboardId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, timerboardId])
+  @@map("user_timerboards")
+}
+
+// Timer model for structure timers
+model Timer {
+  id           String      @id @default(cuid())
+  timerboardId String
+  structureType String      // Using String instead of enum
+  system       String
+  region       String?     // EVE Online region name from ESI
+  location     String      // Planet, moon, or structure name
+  owner        String
+  layer        String?     // Using String instead of enum
+  expiresAt    DateTime
+  activeUntil  DateTime?   // For structures with active windows
+  notes        String?
+  isActive     Boolean     @default(false)
+  isExpired    Boolean     @default(false)
+  addedBy      String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  // Relations
+  timerboard   Timerboard  @relation(fields: [timerboardId], references: [id], onDelete: Cascade)
+  addedByUser  User        @relation(fields: [addedBy], references: [id])
+  
+  @@map("timers")
+}
+
+// Audit log for tracking all operations
+model AuditLog {
+  id           String     @id @default(cuid())
+  timerboardId String?
+  userId       String
+  action       String     // Using String instead of enum for SQLite compatibility
+  details      String     // Store additional details as JSON string
+  createdAt    DateTime   @default(now())
+  
+  // Relations
+  timerboard   Timerboard? @relation(fields: [timerboardId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}

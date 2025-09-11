@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: sway-proxy-local
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites/local.conf:/etc/nginx/sites-available/default.conf:ro
+    restart: unless-stopped
+    depends_on:
+      - timers
+    networks:
+      - sway-network
+
+  timers:
+    build:
+      context: ./projects/timers
+      dockerfile: Dockerfile.dev
+    container_name: sway-timers-local
+    ports:
+      - "3001:3000"  # Direct access for debugging
+    volumes:
+      - ./projects/timers:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD:-swaypassword}@postgres-local:5432/sway_timers_dev?schema=public
+      - EVE_CLIENT_ID=${EVE_CLIENT_ID}
+      - EVE_CLIENT_SECRET=${EVE_CLIENT_SECRET}
+    depends_on:
+      - postgres-local
+    restart: unless-stopped
+    networks:
+      - sway-network
+    command: npm run dev
+  
+  postgres-local:
+    image: postgres:15-alpine
+    container_name: sway-postgres-local
+    ports:
+      - "5432:5432"  # Expose for local development tools
+    environment:
+      POSTGRES_DB: sway_timers_dev
+      POSTGRES_USER: sway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swaypassword}
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - sway-network
+
+networks:
+  sway-network:
+    driver: bridge
+
+volumes:
+  postgres_local_data:

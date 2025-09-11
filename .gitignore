@@ -1,0 +1,36 @@
+# Environment files
+.env
+.env.*
+
+# SSL certificates
+nginx/ssl/*.crt
+nginx/ssl/*.key
+nginx/ssl/*.pem
+
+# Docker volumes
+volumes/
+
+# Node modules in projects
+projects/*/node_modules/
+node_modules/
+.playwright-mcp/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+*.next/

@@ -1,0 +1,22 @@
+FROM node:20-alpine3.20
+
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (including dev dependencies)
+RUN npm ci
+
+# Expose port
+EXPOSE 3000
+
+# Health check (more lenient for dev)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Start the development server
+CMD ["npm", "run", "dev"]

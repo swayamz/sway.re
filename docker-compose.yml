@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: sway-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites:/etc/nginx/sites-available:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+    depends_on:
+      - timers
+    networks:
+      - sway-network
+
+  timers:
+    build:
+      context: ./projects/timers
+      dockerfile: Dockerfile
+    container_name: sway-timers
+    expose:
+      - "3000"
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD:-swaypassword}@postgres:5432/sway_timers?schema=public
+    depends_on:
+      - postgres
+    networks:
+      - sway-network
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: sway-postgres
+    environment:
+      POSTGRES_DB: sway_timers
+      POSTGRES_USER: sway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swaypassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - sway-network
+
+networks:
+  sway-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
