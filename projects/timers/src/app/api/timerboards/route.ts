@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isSiteAdmin } from '@/lib/auth-utils'
 
 export async function GET() {
   try {
@@ -60,6 +61,15 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = (session.user as any).userId
+    
+    // Check if user is a site admin (only admins can create timerboards)
+    const isAdmin = await isSiteAdmin(userId)
+    if (!isAdmin) {
+      return NextResponse.json({ 
+        error: 'Only site administrators can create timerboards' 
+      }, { status: 403 })
+    }
+
     const { name, description } = await request.json()
 
     if (!name || name.trim().length === 0) {
@@ -81,6 +91,21 @@ export async function POST(request: NextRequest) {
         userId: userId,
         timerboardId: timerboard.id,
         role: 'ADMIN',
+      },
+    })
+
+    // Create audit log entry
+    await prisma.auditLog.create({
+      data: {
+        timerboardId: timerboard.id,
+        userId,
+        action: 'TIMERBOARD_CREATED',
+        details: JSON.stringify({
+          timerboardId: timerboard.id,
+          name: timerboard.name,
+          description: timerboard.description,
+          createdAt: timerboard.createdAt.toISOString(),
+        }),
       },
     })
 

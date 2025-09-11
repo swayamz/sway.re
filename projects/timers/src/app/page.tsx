@@ -4,6 +4,235 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { AddTimerModal } from '@/components/timers/add-timer-modal'
 
+interface TimerboardSelectionProps {
+  timerboards: any[]
+  onSelectTimerboard: (id: string) => void
+  isAdmin: boolean
+  onTimerboardsUpdated: () => void
+}
+
+function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimerboardsUpdated }: TimerboardSelectionProps) {
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newTimerboardName, setNewTimerboardName] = useState('')
+  const [newTimerboardDescription, setNewTimerboardDescription] = useState('')
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createError, setCreateError] = useState('')
+  
+  const handleCreateTimerboard = async () => {
+    if (!newTimerboardName.trim()) {
+      setCreateError('Name is required')
+      return
+    }
+    
+    setCreateLoading(true)
+    setCreateError('')
+
+    try {
+      const response = await fetch('/api/timerboards', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newTimerboardName.trim(),
+          description: newTimerboardDescription.trim() || null,
+        }),
+      })
+
+      if (response.ok) {
+        setNewTimerboardName('')
+        setNewTimerboardDescription('')
+        setShowCreateModal(false)
+        onTimerboardsUpdated()
+      } else {
+        const errorData = await response.json()
+        setCreateError(errorData.error || 'Failed to create timerboard')
+      }
+    } catch (error) {
+      setCreateError('Failed to create timerboard')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const handleDeleteTimerboard = async (timerboardId: string, timerboardName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${timerboardName}"? This will delete all associated timers and cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/timerboards/${timerboardId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        onTimerboardsUpdated()
+      } else {
+        const errorData = await response.json()
+        alert(errorData.error || 'Failed to delete timerboard')
+      }
+    } catch (error) {
+      alert('Failed to delete timerboard')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <h2 className="text-2xl font-bold mb-4">Select a Timerboard</h2>
+        <p className="text-gray-400">
+          Choose a timerboard to view and manage structure timers.
+        </p>
+      </div>
+
+      {/* Admin Actions */}
+      {isAdmin && (
+        <div className="flex justify-center">
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium"
+          >
+            Create New Timerboard
+          </button>
+        </div>
+      )}
+
+      {/* Timerboards Grid */}
+      {timerboards.length === 0 ? (
+        <div className="text-center py-12">
+          <h3 className="text-xl font-semibold mb-4">No Timerboards Available</h3>
+          <p className="text-gray-400">
+            {isAdmin 
+              ? "Create your first timerboard to get started." 
+              : "Ask an admin to add you to a timerboard."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {timerboards.map((board) => (
+            <div 
+              key={board.id} 
+              className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-green-500 transition-colors cursor-pointer"
+              onClick={() => onSelectTimerboard(board.id)}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-green-400 mb-2">{board.name}</h3>
+                  {board.description && (
+                    <p className="text-gray-400 text-sm mb-3">{board.description}</p>
+                  )}
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteTimerboard(board.id, board.name)
+                    }}
+                    className="text-red-400 hover:text-red-300 text-sm ml-2"
+                    title="Delete timerboard"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">
+                  {board.timerCount} timer{board.timerCount !== 1 ? 's' : ''}
+                </span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  board.role === 'ADMIN' ? 'bg-blue-600 text-white' :
+                  board.role === 'MODERATOR' ? 'bg-green-600 text-white' :
+                  'bg-yellow-600 text-white'
+                }`}>
+                  {board.role}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Timerboard Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-green-400">Create New Timerboard</h2>
+              <button 
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setCreateError('')
+                  setNewTimerboardName('')
+                  setNewTimerboardDescription('')
+                }}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {createError && (
+              <div className="bg-red-600 text-white p-3 rounded mb-4">
+                {createError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-sm font-medium">Name *</span>
+                <input
+                  type="text"
+                  value={newTimerboardName}
+                  onChange={(e) => setNewTimerboardName(e.target.value)}
+                  placeholder="Enter timerboard name"
+                  className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                  disabled={createLoading}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Description</span>
+                <textarea
+                  value={newTimerboardDescription}
+                  onChange={(e) => setNewTimerboardDescription(e.target.value)}
+                  placeholder="Enter timerboard description (optional)"
+                  rows={3}
+                  className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                  disabled={createLoading}
+                />
+              </label>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={handleCreateTimerboard}
+                  disabled={createLoading || !newTimerboardName.trim()}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-2 px-4 rounded font-medium"
+                >
+                  {createLoading ? 'Creating...' : 'Create Timerboard'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setCreateError('')
+                    setNewTimerboardName('')
+                    setNewTimerboardDescription('')
+                  }}
+                  className="bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded"
+                  disabled={createLoading}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Timer {
   id: string
   structureType: string
@@ -82,6 +311,9 @@ export default function HomePage() {
   const [timerboardUsers, setTimerboardUsers] = useState<any[]>([])
   const [userManagementLoading, setUserManagementLoading] = useState(false)
   const [userManagementError, setUserManagementError] = useState('')
+  const [statistics, setStatistics] = useState<any>(null)
+  const [auditLogs, setAuditLogs] = useState<any[]>([])
+  const [statisticsLoading, setStatisticsLoading] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -103,11 +335,7 @@ export default function HomePage() {
       if (response.ok) {
         const boards = await response.json()
         setTimerboards(boards)
-        
-        // Select first timerboard by default
-        if (boards.length > 0) {
-          fetchTimerboard(boards[0].id)
-        }
+        // Don't auto-select timerboard - let user choose
       }
     } catch (error) {
       console.error('Error fetching timerboards:', error)
@@ -185,6 +413,37 @@ export default function HomePage() {
     }
   }
 
+  const fetchStatistics = async () => {
+    if (!selectedTimerboard) return
+    
+    setStatisticsLoading(true)
+    try {
+      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/statistics`)
+      if (response.ok) {
+        const data = await response.json()
+        setStatistics(data)
+      }
+    } catch (error) {
+      console.error('Error fetching statistics:', error)
+    } finally {
+      setStatisticsLoading(false)
+    }
+  }
+
+  const fetchAuditLogs = async () => {
+    if (!selectedTimerboard) return
+    
+    try {
+      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/audit-logs`)
+      if (response.ok) {
+        const data = await response.json()
+        setAuditLogs(data.auditLogs)
+      }
+    } catch (error) {
+      console.error('Error fetching audit logs:', error)
+    }
+  }
+
   const handleAddUser = async () => {
     if (!newUserName.trim() || !selectedTimerboard) return
     
@@ -220,10 +479,41 @@ export default function HomePage() {
     }
   }
 
-  // Fetch timerboard users when manage board is shown
+  const handleRemoveUser = async (characterName: string) => {
+    if (!confirm(`Are you sure you want to remove "${characterName}" from this timerboard?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/timerboards/${selectedTimerboard?.timerboard.id}/users`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          characterName: characterName,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        fetchTimerboardUsers() // Refresh the user list
+      } else {
+        alert(data.error || 'Failed to remove user')
+      }
+    } catch (error) {
+      console.error('Error removing user:', error)
+      alert('Failed to remove user')
+    }
+  }
+
+  // Fetch timerboard users, statistics, and audit logs when manage board is shown
   useEffect(() => {
     if (showManageBoard && selectedTimerboard) {
       fetchTimerboardUsers()
+      fetchStatistics()
+      fetchAuditLogs()
     }
   }, [showManageBoard, selectedTimerboard])
 
@@ -257,17 +547,19 @@ export default function HomePage() {
     )
   }
 
-  // Show loading state for timerboards
+  // Show timerboard selection interface
   if (!selectedTimerboard && !loading) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-12">
-          <h2 className="text-xl font-semibold mb-4">No Timerboards Available</h2>
-          <p className="text-gray-400 mb-6">
-            You don&apos;t have access to any timerboards yet. Ask an admin to add you to a timerboard.
-          </p>
-        </div>
-      </div>
+      <TimerboardSelection 
+        timerboards={timerboards} 
+        onSelectTimerboard={fetchTimerboard}
+        isAdmin={(session?.user as any)?.isAdmin || false}
+        onTimerboardsUpdated={() => {
+          // Clear selection when timerboards are updated (like after deletion)
+          setSelectedTimerboard(null)
+          fetchTimerboards()
+        }}
+      />
     )
   }
 
@@ -301,7 +593,15 @@ export default function HomePage() {
       {selectedTimerboard && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
+              <div className="flex items-center space-x-3 mb-2">
+                <button 
+                  onClick={() => setSelectedTimerboard(null)}
+                  className="text-green-400 hover:text-green-300 text-sm"
+                >
+                  ← Back to Timerboards
+                </button>
+              </div>
               <div className="flex items-center space-x-3">
                 <h2 className="text-2xl font-bold text-green-400">{selectedTimerboard.timerboard.name}</h2>
                 <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium uppercase">
@@ -339,19 +639,21 @@ export default function HomePage() {
         >
           {showPastTimers && !showManageBoard ? 'View Upcoming Timers' : 'View Past Timers'}
         </button>
-        <button 
-          onClick={() => {
-            setShowManageBoard(!showManageBoard)
-            setShowPastTimers(false)
-          }}
-          className={`px-6 py-2 rounded-lg font-medium ${
-            showManageBoard
-              ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-              : 'bg-gray-700 hover:bg-gray-600 text-white'
-          }`}
-        >
-          Manage Board
-        </button>
+        {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && (
+          <button 
+            onClick={() => {
+              setShowManageBoard(!showManageBoard)
+              setShowPastTimers(false)
+            }}
+            className={`px-6 py-2 rounded-lg font-medium ${
+              showManageBoard
+                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                : 'bg-gray-700 hover:bg-gray-600 text-white'
+            }`}
+          >
+            Manage Board
+          </button>
+        )}
       </div>
       
       {/* Main Content Area */}
@@ -421,6 +723,19 @@ export default function HomePage() {
                             }`}>
                               {user.isAdmin ? 'ADMIN' : user.role}
                             </span>
+                            {/* Show remove button for moderators/admins, but not for self or site admins */}
+                            {selectedTimerboard && 
+                             (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && 
+                             user.characterName !== session?.user?.name && 
+                             !user.isAdmin && (
+                              <button
+                                onClick={() => handleRemoveUser(user.characterName)}
+                                className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded"
+                                title={`Remove ${user.characterName} from timerboard`}
+                              >
+                                Remove
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -448,29 +763,118 @@ export default function HomePage() {
             {/* Statistics Section */}
             <div className="space-y-4">
               <h4 className="text-md font-semibold">Statistics</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-900 rounded-lg p-4">
-                  <h5 className="text-sm font-medium text-gray-400 mb-2">Total Timers This Month</h5>
-                  <div className="text-2xl font-bold text-green-400">
-                    {selectedTimerboard?.timers.length || 0}
+              {statisticsLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-green-400 border-t-transparent mx-auto"></div>
+                </div>
+              ) : statistics ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <h5 className="text-sm font-medium text-gray-400 mb-2">Timers This Month</h5>
+                      <div className="text-2xl font-bold text-green-400">
+                        {statistics.timersThisMonth}
+                      </div>
+                    </div>
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <h5 className="text-sm font-medium text-gray-400 mb-2">Total Timers</h5>
+                      <div className="text-2xl font-bold text-blue-400">
+                        {statistics.totalTimers}
+                      </div>
+                    </div>
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <h5 className="text-sm font-medium text-gray-400 mb-2">Active Users</h5>
+                      <div className="text-2xl font-bold text-purple-400">
+                        {statistics.activeUsersCount}
+                      </div>
+                    </div>
                   </div>
+                  
+                  {/* User Statistics */}
+                  {statistics.userStats.length > 0 && (
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <h5 className="text-sm font-medium text-gray-400 mb-3">Top Contributors This Month</h5>
+                      <div className="space-y-2">
+                        {statistics.userStats.slice(0, 5).map((user: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <span className="text-white">{user.characterName}</span>
+                            <span className="text-green-400 font-medium">{user.timerCount} timers</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Structure Type Breakdown */}
+                  {statistics.structureStats.length > 0 && (
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <h5 className="text-sm font-medium text-gray-400 mb-3">Structure Types This Month</h5>
+                      <div className="space-y-2">
+                        {statistics.structureStats.map((structure: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <span className="text-white">{structure.structureType}</span>
+                            <span className="text-blue-400 font-medium">{structure.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-gray-900 rounded-lg p-4">
-                  <h5 className="text-sm font-medium text-gray-400 mb-2">Active Users</h5>
-                  <div className="text-2xl font-bold text-blue-400">1</div>
+              ) : (
+                <div className="bg-gray-900 rounded-lg p-4 text-gray-400 text-center">
+                  No statistics available
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Audit Log Section */}
             <div className="space-y-4">
               <h4 className="text-md font-semibold">Recent Activity</h4>
               <div className="bg-gray-900 rounded-lg p-4">
-                <div className="text-gray-400 text-sm">
-                  <div className="mb-2">• Timer added by Sway Re - Orbital Skyhook (F2OY-X)</div>
-                  <div className="mb-2">• Timer added by Sway Re - Astrahus (RV5-TT)</div>
-                  <div>• Timer added by Sway Re - Orbital Skyhook (VK-A5G)</div>
-                </div>
+                {auditLogs.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {auditLogs.map((log: any) => (
+                      <div key={log.id} className="text-sm border-b border-gray-700 pb-2 last:border-b-0">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <span className="text-white font-medium">{log.characterName}</span>
+                            <span className="text-gray-400 ml-2">
+                              {log.action === 'TIMER_ADDED' && 'added timer'}
+                              {log.action === 'TIMER_DELETED' && 'deleted timer'}
+                              {log.action === 'TIMER_REPAIRED' && 'repaired timer'}
+                              {log.action === 'USER_ADDED' && 'added user'}
+                              {log.action === 'USER_REMOVED' && 'removed user'}
+                            </span>
+                            {log.details && (
+                              <div className="text-gray-400 text-xs mt-1">
+                                {log.action === 'TIMER_ADDED' && log.details.structureType && (
+                                  <span>
+                                    {log.details.structureType.replace(/_/g, ' ').toLowerCase()
+                                      .replace(/\b\w/g, (l: string) => l.toUpperCase())} 
+                                    ({log.details.system} - {log.details.location})
+                                  </span>
+                                )}
+                                {log.action === 'USER_ADDED' && log.details.addedUserName && (
+                                  <span>User: {log.details.addedUserName}</span>
+                                )}
+                                {log.action === 'USER_REMOVED' && log.details.removedUserName && (
+                                  <span>User: {log.details.removedUserName}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 ml-4">
+                            {new Date(log.createdAt).toLocaleDateString()} {new Date(log.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-400 text-sm text-center py-4">
+                    No recent activity
+                  </div>
+                )}
               </div>
             </div>
           </div>

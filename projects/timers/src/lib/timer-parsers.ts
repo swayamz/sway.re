@@ -5,7 +5,7 @@ export interface ParsedTimer {
   system: string
   location: string
   owner: string
-  expiresAt: Date
+  expiresAt: Date | undefined
   activeUntil?: Date
   layer?: string
 }
@@ -42,7 +42,7 @@ export function parseOrbitalSkyhook(input: string): ParsedTimer | null {
     const [, system, planet] = locationMatch
 
     // Parse reinforced until line
-    let expiresAt: Date
+    let expiresAt: Date | undefined
     for (const line of lines) {
       if (line.startsWith('Reinforced until')) {
         const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
@@ -100,7 +100,7 @@ export function parseJumpBridge(input: string, owner: string): ParsedTimer | nul
     const [, system, structureName] = bridgeMatch
 
     // Parse reinforced until line
-    let expiresAt: Date
+    let expiresAt: Date | undefined
     for (const line of lines) {
       if (line.startsWith('Reinforced until')) {
         const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
@@ -191,7 +191,7 @@ export function parseOtherStructure(
     const [, system, structureName] = structureMatch
 
     // Parse reinforced until line
-    let expiresAt: Date
+    let expiresAt: Date | undefined
     for (const line of lines) {
       if (line.startsWith('Reinforced until')) {
         const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
@@ -207,8 +207,14 @@ export function parseOtherStructure(
       throw new Error('Could not parse reinforced until date')
     }
 
-    // Other structures have a 15-minute active window after the timer expires
-    const activeUntil = new Date(expiresAt.getTime() + (15 * 60 * 1000))
+    // Calculate active window based on layer
+    // HULL layer has 30-minute window, others have 15-minute window
+    let repairWindowMinutes = 15
+    if (layer === 'HULL') {
+      repairWindowMinutes = 30
+    }
+    
+    const activeUntil = new Date(expiresAt.getTime() + (repairWindowMinutes * 60 * 1000))
 
     return {
       structureType,

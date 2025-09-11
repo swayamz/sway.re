@@ -26,11 +26,23 @@ services:
       - "3000"
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD:-swaypassword}@postgres:5432/sway_timers?schema=public
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD}@postgres:5432/sway_timers?schema=public
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://timers.sway.re}
+      - NEXTAUTH_URL_INTERNAL=http://localhost:3000
+      - EVE_CLIENT_ID=${EVE_CLIENT_ID}
+      - EVE_CLIENT_SECRET=${EVE_CLIENT_SECRET}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - sway-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   
   postgres:
     image: postgres:15-alpine
@@ -38,12 +50,23 @@ services:
     environment:
       POSTGRES_DB: sway_timers
       POSTGRES_USER: sway
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swaypassword}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Performance and reliability settings
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
     restart: unless-stopped
     networks:
       - sway-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sway -d sway_timers"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # Security: only expose to internal network, not host
+    # ports: ["5432:5432"]  # Uncomment only for debugging
 
 networks:
   sway-network:

@@ -60,12 +60,18 @@ export async function POST(request: NextRequest) {
       case 'ASTRAHUS':
       case 'ATHANOR':
       case 'TATARA':
+      case 'RAITARU':
       case 'FORTIZAR':
       case 'AZBEL':
       case 'SOTIYO':
       case 'KEEPSTAR':
       case 'METENOX':
-        activeUntil = new Date(expiryDate.getTime() + 15 * 60 * 1000) // 15 minutes
+        // For structures with layers, HULL has 30 min window, others have 15 min
+        if (layer === 'HULL') {
+          activeUntil = new Date(expiryDate.getTime() + 30 * 60 * 1000) // 30 minutes for HULL
+        } else {
+          activeUntil = new Date(expiryDate.getTime() + 15 * 60 * 1000) // 15 minutes for ARMOR/ANCHORING
+        }
         break
     }
 

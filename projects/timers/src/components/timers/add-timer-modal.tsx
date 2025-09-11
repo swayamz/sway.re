@@ -81,7 +81,7 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded }: A
           break
       }
 
-      if (!parsedTimer) {
+      if (!parsedTimer || !parsedTimer.expiresAt) {
         setError('Failed to parse timer input. Please check the format.')
         setLoading(false)
         return
@@ -190,49 +190,56 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded }: A
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Astrahus</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor only)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('FORTIZAR')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Fortizar</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor) / 30min (hull)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('ATHANOR')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Athanor</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor only)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('TATARA')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Tatara</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor) / 30min (hull)</div>
+              </button>
+              <button
+                onClick={() => handleStructureTypeChange('RAITARU')}
+                className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
+              >
+                <div className="font-semibold">Raitaru</div>
+                <div className="text-sm text-gray-400">15min (armor only)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('AZBEL')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Azbel</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor) / 30min (hull)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('SOTIYO')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Sotiyo</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor) / 30min (hull)</div>
               </button>
               <button
                 onClick={() => handleStructureTypeChange('KEEPSTAR')}
                 className="p-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-left"
               >
                 <div className="font-semibold">Keepstar</div>
-                <div className="text-sm text-gray-400">15min active window</div>
+                <div className="text-sm text-gray-400">15min (armor) / 30min (hull)</div>
               </button>
             </div>
           </div>
@@ -342,7 +349,7 @@ Reinforced until 2025.08.26 19:16:49"
               </div>
             )}
 
-            {['ASTRAHUS', 'ATHANOR', 'TATARA', 'FORTIZAR', 'AZBEL', 'SOTIYO', 'KEEPSTAR'].includes(structureType) && (
+            {['FORTIZAR', 'AZBEL', 'SOTIYO', 'KEEPSTAR', 'TATARA'].includes(structureType) && (
               <div className="space-y-3">
                 <label className="block">
                   <span className="text-sm font-medium">Structure Layer:</span>
@@ -355,6 +362,45 @@ Reinforced until 2025.08.26 19:16:49"
                     <option value="ANCHORING">Anchoring</option>
                     <option value="ARMOR">Armor</option>
                     <option value="HULL">Hull</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">Owner:</span>
+                  <input
+                    type="text"
+                    value={owner}
+                    onChange={(e) => setOwner(e.target.value)}
+                    placeholder="Enter owner name"
+                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">Paste from game:</span>
+                  <textarea
+                    value={pasteInput}
+                    onChange={(e) => setPasteInput(e.target.value)}
+                    placeholder="Y-MPWL - Road of Military Parade S
+3,714 km
+Reinforced until 2025.08.24 19:25:45"
+                    rows={4}
+                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+                  />
+                </label>
+              </div>
+            )}
+
+            {['ASTRAHUS', 'ATHANOR', 'RAITARU'].includes(structureType) && (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-sm font-medium">Structure Layer:</span>
+                  <select
+                    value={layer}
+                    onChange={(e) => setLayer(e.target.value)}
+                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                  >
+                    <option value="">Select layer...</option>
+                    <option value="ANCHORING">Anchoring</option>
+                    <option value="ARMOR">Armor</option>
                   </select>
                 </label>
                 <label className="block">

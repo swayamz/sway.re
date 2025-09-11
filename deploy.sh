@@ -14,11 +14,127 @@ echo "🚀 Starting deployment of Sway multi-project hosting..."
 echo "Environment: $ENVIRONMENT"
 echo "Domain: $DOMAIN"
 
-# Create .env file if it doesn't exist
+# Create .env file if it doesn't exist or prompt for missing values
 if [ ! -f .env ]; then
     echo "📝 Creating .env file..."
     cp .env.example .env
-    sed -i "s/sway.re/$DOMAIN/g" .env
+else
+    echo "📝 Found existing .env file, checking for missing values..."
+fi
+
+# Function to prompt for environment variable if not set
+prompt_env_var() {
+    local var_name=$1
+    local prompt_text=$2
+    local default_value=$3
+    local is_secret=${4:-false}
+    
+    if ! grep -q "^${var_name}=" .env || grep -q "^${var_name}=your-" .env || grep -q "^${var_name}=$" .env; then
+        echo ""
+        if [ "$is_secret" = "true" ]; then
+            echo -n "🔐 $prompt_text: "
+            read -s value
+            echo ""
+        else
+            echo -n "📝 $prompt_text"
+            if [ -n "$default_value" ]; then
+                echo -n " [$default_value]"
+            fi
+            echo -n ": "
+            read value
+            
+            if [ -z "$value" ] && [ -n "$default_value" ]; then
+                value="$default_value"
+            fi
+        fi
+        
+        if [ -n "$value" ]; then
+            if grep -q "^${var_name}=" .env; then
+                sed -i "s|^${var_name}=.*|${var_name}=${value}|" .env
+            else
+                echo "${var_name}=${value}" >> .env
+            fi
+        fi
+    fi
+}
+
+# Update domain in .env
+sed -i "s/sway.re/$DOMAIN/g" .env
+
+echo ""
+echo "🔧 Setting up environment variables..."
+echo "⚠️  The following are REQUIRED for the timers application to work:"
+
+# Generate database password if not set or empty
+if grep -q "your_secure_password_here" .env || ! grep -q "^POSTGRES_PASSWORD=." .env; then
+    POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    if grep -q "^POSTGRES_PASSWORD=" .env; then
+        sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$POSTGRES_PASSWORD/" .env
+    else
+        echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> .env
+    fi
+    echo "✅ Generated secure database password: $POSTGRES_PASSWORD"
+    echo "   (This password is saved in .env file)"
+fi
+
+# Prompt for required variables
+prompt_env_var "LETSENCRYPT_EMAIL" "Email for SSL certificates (Let's Encrypt)" "admin@$DOMAIN"
+
+# NextAuth configuration
+echo ""
+echo "🔐 NextAuth Configuration (required for user authentication):"
+prompt_env_var "NEXTAUTH_SECRET" "NextAuth secret key (will generate if empty)"
+prompt_env_var "NEXTAUTH_URL" "NextAuth URL" "https://timers.$DOMAIN"
+
+# Ensure NEXTAUTH_URL matches the domain being deployed
+if grep -q "timers.sway.re" .env && [ "$DOMAIN" != "sway.re" ]; then
+    sed -i "s|timers.sway.re|timers.$DOMAIN|g" .env
+    echo "✅ Updated NextAuth URL to match domain: timers.$DOMAIN"
+fi
+
+# Generate NextAuth secret if not provided
+if grep -q "your-nextauth-secret-key-here" .env || grep -q "^NEXTAUTH_SECRET=$" .env; then
+    NEXTAUTH_SECRET=$(openssl rand -base64 32)
+    sed -i "s|your-nextauth-secret-key-here|$NEXTAUTH_SECRET|" .env
+    sed -i "s|^NEXTAUTH_SECRET=$|NEXTAUTH_SECRET=$NEXTAUTH_SECRET|" .env
+    echo "✅ Generated NextAuth secret key"
+fi
+
+# EVE Online SSO configuration
+echo ""
+echo "🚀 EVE Online SSO Configuration (REQUIRED):"
+echo "   Get these from: https://developers.eveonline.com/applications"
+echo "   Create a new application with callback URL: https://timers.$DOMAIN/api/auth/callback/eve-online"
+prompt_env_var "EVE_CLIENT_ID" "EVE Online Client ID" "" false
+prompt_env_var "EVE_CLIENT_SECRET" "EVE Online Client Secret" "" true
+
+# Verify required variables are set
+echo ""
+echo "🔍 Verifying configuration..."
+
+missing_vars=""
+if grep -q "your-eve-client-id" .env; then
+    missing_vars="$missing_vars EVE_CLIENT_ID"
+fi
+if grep -q "your-eve-client-secret" .env; then
+    missing_vars="$missing_vars EVE_CLIENT_SECRET"
+fi
+
+if [ -n "$missing_vars" ]; then
+    echo ""
+    echo "❌ Missing required environment variables:$missing_vars"
+    echo "   The application will not work without EVE Online SSO credentials."
+    echo "   You can add them later by editing the .env file and restarting with:"
+    echo "   docker-compose restart"
+    echo ""
+    echo -n "Continue with deployment anyway? (y/N): "
+    read continue_deploy
+    if [ "$continue_deploy" != "y" ] && [ "$continue_deploy" != "Y" ]; then
+        echo "❌ Deployment cancelled. Please configure EVE Online SSO and run again."
+        exit 1
+    fi
+else
+    echo "✅ All required variables are configured"
 fi
 
 # Update system packages
@@ -53,17 +169,58 @@ docker-compose down 2>/dev/null || true
 echo "🏗️ Building and starting containers..."
 docker-compose up --build -d
 
-# Wait for containers to be healthy
+# Wait for database to be ready with health checks
+echo "⏳ Waiting for database to be ready..."
+timeout=60
+counter=0
+until docker-compose exec -T postgres pg_isready -U sway -d sway_timers >/dev/null 2>&1; do
+    counter=$((counter + 1))
+    if [ $counter -gt $timeout ]; then
+        echo "❌ Database failed to start within ${timeout}s"
+        docker-compose logs postgres
+        exit 1
+    fi
+    echo "Waiting for database... ($counter/${timeout}s)"
+    sleep 1
+done
+echo "✅ Database is ready"
+
+# Run database migrations for timers app
+echo "🗄️ Running database migrations..."
+if docker-compose exec -T timers npm run db:generate; then
+    echo "✅ Prisma client generated successfully"
+else
+    echo "❌ Failed to generate Prisma client"
+    docker-compose logs timers
+    exit 1
+fi
+
+if docker-compose exec -T timers npm run db:migrate; then
+    echo "✅ Database migrations completed successfully"
+else
+    echo "❌ Database migrations failed"
+    docker-compose logs timers
+    exit 1
+fi
+
+# Wait for services to be fully ready
 echo "⏳ Waiting for services to be ready..."
 sleep 10
 
 # Test deployment
 echo "🧪 Testing deployment..."
 if curl -f http://localhost/health >/dev/null 2>&1; then
-    echo "✅ Health check passed"
+    echo "✅ Main health check passed"
 else
-    echo "⚠️ Health check failed - checking container logs"
-    docker-compose logs --tail=20
+    echo "⚠️ Main health check failed"
+fi
+
+# Test timers subdomain (if running locally with hosts file setup)
+if curl -f -H "Host: timers.$DOMAIN" http://localhost/api/health >/dev/null 2>&1; then
+    echo "✅ Timers health check passed"
+else
+    echo "⚠️ Timers health check failed - checking container logs"
+    docker-compose logs --tail=20 timers
 fi
 
 # Show container status

@@ -100,6 +100,10 @@ export async function canDeleteTimer(userId: string, timerboardId: string): Prom
   return await hasPermission(userId, timerboardId, UserRole.MODERATOR)
 }
 
+export async function canModerateTimerboard(userId: string, timerboardId: string): Promise<boolean> {
+  return await hasPermission(userId, timerboardId, UserRole.MODERATOR)
+}
+
 export async function canManageUsers(userId: string, timerboardId: string): Promise<boolean> {
   return await hasPermission(userId, timerboardId, UserRole.MODERATOR)
 }
