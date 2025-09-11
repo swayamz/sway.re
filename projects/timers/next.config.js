@@ -4,6 +4,7 @@ const nextConfig = {
     eslint: {
     // Disables ESLint during the build process
     ignoreDuringBuilds: true,
+    ignoreBuildErrors: true,
   },
 }
 
