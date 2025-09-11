@@ -1,99 +1,111 @@
-// EVE Online ESI API integration for system and region data
-// https://developers.eveonline.com/api-explorer
-
 interface EsiSystemData {
-  system_id: number
-  name: string
   constellation_id: number
-  star_id: number
-  planets?: any[]
-}
-
-interface EsiRegionData {
-  region_id: number
   name: string
-  description?: string
-  constellations: number[]
+  system_id: number
+  position: { x: number; y: number; z: number }
 }
 
 interface EsiConstellationData {
   constellation_id: number
   name: string
+  position: { x: number; y: number; z: number }
   region_id: number
   systems: number[]
 }
 
-// Cache to avoid repeated API calls
-const systemCache = new Map<string, { region: string, systemId: number }>()
+interface EsiRegionData {
+  constellations: number[]
+  description: string
+  name: string
+  region_id: number
+}
+
+const systemCache = new Map<string, { region: string; systemId: number }>();
+
+const ESI_HEADERS = {
+  'Accept': 'application/json',
+  'Content-Type': 'application/json',
+  'X-Compatibility-Date': '2025-08-26',
+  'Accept-Language': '',
+  'If-None-Match': '',
+  'X-Tenant': '',
+}
 
 export async function getSystemRegion(systemName: string): Promise<string | null> {
   try {
     // Check cache first
     if (systemCache.has(systemName)) {
-      return systemCache.get(systemName)!.region
+      return systemCache.get(systemName)!.region;
     }
 
-    // Search for system by name
-    const searchUrl = `https://esi.evetech.net/solar_system/${encodeURIComponent(systemName)}/search`
+    // Step 1: Get system ID from name
+    const idsResponse = await fetch('https://esi.evetech.net/universe/ids', {
+      method: 'POST',
+      headers: ESI_HEADERS,
+      body: JSON.stringify([systemName]),
+    });
 
-    const searchResponse = await fetch(searchUrl)
-    
-    if (!searchResponse.ok) {
-      console.error(`ESI search failed: ${searchResponse.status} ${searchResponse.statusText}`)
-      return null
+    if (!idsResponse.ok) {
+      console.error(`ESI /universe/ids failed: ${idsResponse.status} ${idsResponse.statusText}`);
+      return null;
     }
 
-    const searchData = await searchResponse.json()
-    
-    if (!searchData.solar_system || searchData.solar_system.length === 0) {
-      console.error(`System not found: ${systemName}`)
-      return null
+    const idsData = await idsResponse.json();
+    const systemId = idsData.systems?.[0]?.id;
+
+    if (!systemId) {
+      console.error(`System not found: ${systemName}`);
+      return null;
     }
 
-    const systemId = searchData.solar_system[0]
+    // Step 2: Get system details
+    const systemResponse = await fetch(
+      `https://esi.evetech.net/universe/systems/${systemId}`,
+      { headers: ESI_HEADERS }
+    );
 
-    // Get system details
-    const systemUrl = `https://esi.evetech.net/latest/universe/systems/${systemId}/`
-    const systemResponse = await fetch(systemUrl)
-    
     if (!systemResponse.ok) {
-      console.error(`ESI system fetch failed: ${systemResponse.status} ${systemResponse.statusText}`)
-      return null
+      console.error(`ESI system fetch failed: ${systemResponse.status} ${systemResponse.statusText}`);
+      return null;
     }
 
-    const systemData: EsiSystemData = await systemResponse.json()
+    const systemData: EsiSystemData = await systemResponse.json();
 
-    // Get constellation details to find region
-    const constellationUrl = `https://esi.evetech.net/latest/universe/constellations/${systemData.constellation_id}/`
-    const constellationResponse = await fetch(constellationUrl)
-    
+    // Step 3: Get constellation details
+    const constellationResponse = await fetch(
+      `https://esi.evetech.net/universe/constellations/${systemData.constellation_id}`,
+      { headers: ESI_HEADERS }
+    );
+
     if (!constellationResponse.ok) {
-      console.error(`ESI constellation fetch failed: ${constellationResponse.status} ${constellationResponse.statusText}`)
-      return null
+      console.error(`ESI constellation fetch failed: ${constellationResponse.status} ${constellationResponse.statusText}`);
+      return null;
     }
 
-    const constellationData: EsiConstellationData = await constellationResponse.json()
+    const constellationData: EsiConstellationData = await constellationResponse.json();
 
-    // Get region name
-    const regionUrl = `https://esi.evetech.net/latest/universe/regions/${constellationData.region_id}/`
-    const regionResponse = await fetch(regionUrl)
-    
+    // Step 4: Get region details
+    const regionResponse = await fetch(
+      `https://esi.evetech.net/universe/regions/${constellationData.region_id}`,
+      { headers: ESI_HEADERS }
+    );
+
     if (!regionResponse.ok) {
-      console.error(`ESI region fetch failed: ${regionResponse.status} ${regionResponse.statusText}`)
-      return null
+      console.error(`ESI region fetch failed: ${regionResponse.status} ${regionResponse.statusText}`);
+      return null;
     }
 
-    const regionData: EsiRegionData = await regionResponse.json()
+    const regionData: EsiRegionData = await regionResponse.json();
 
-    // Cache the result
-    systemCache.set(systemName, { 
-      region: regionData.name, 
-      systemId: systemId 
-    })
+    // Cache result
+    systemCache.set(systemName, {
+      region: regionData.name,
+      systemId: systemId,
+    });
 
-    return regionData.name
+    return regionData.name;
   } catch (error) {
-    console.error('Error fetching system region from ESI:', error)
-    return null
+    console.error('Error fetching system region from ESI:', error);
+    return null;
   }
 }

@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
 
     // Fetch region data from EVE Online ESI
     const region = await getSystemRegion(system)
-    console.log(region)
 
     // Calculate active window based on structure type
     let activeUntil = null
