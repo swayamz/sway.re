@@ -45,7 +45,7 @@ export async function GET(
     })
 
     // Format the logs for display
-    const formattedLogs = auditLogs.map(log => {
+    const formattedLogs = auditLogs.map((log: any) => {
       let details
       try {
         details = JSON.parse(log.details)
