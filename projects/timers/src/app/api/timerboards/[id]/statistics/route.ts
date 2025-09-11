@@ -66,7 +66,7 @@ export async function GET(
 
     // Get user statistics with character names
     const userStats = await Promise.all(
-      activeUsers.map(async (user) => {
+      activeUsers.map(async (user: any) => {
         const userData = await prisma.user.findUnique({
           where: { id: user.addedBy },
           select: { characterName: true },
@@ -94,9 +94,9 @@ export async function GET(
     })
 
     // Format structure types for display
-    const formattedStructureStats = structureStats.map(stat => ({
+    const formattedStructureStats = structureStats.map((stat: any) => ({
       structureType: stat.structureType.replace(/_/g, ' ').toLowerCase()
-        .replace(/\b\w/g, l => l.toUpperCase()),
+        .replace(/\b\w/g, (l: any) => l.toUpperCase()),
       count: stat._count.structureType,
     }))
 

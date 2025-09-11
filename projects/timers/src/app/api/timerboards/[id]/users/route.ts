@@ -177,7 +177,7 @@ export async function GET(
     })
 
     return NextResponse.json({
-      users: timerboardUsers.map(userTimerboard => ({
+      users: timerboardUsers.map((userTimerboard: any) => ({
         characterName: userTimerboard.user.characterName,
         role: userTimerboard.role,
         isAdmin: userTimerboard.user.isAdmin,

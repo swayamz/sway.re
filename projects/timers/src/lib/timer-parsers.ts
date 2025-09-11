@@ -17,7 +17,7 @@ export function parseOrbitalSkyhook(input: string): ParsedTimer | null {
     // 69 km
     // Reinforced until 2025.05.04 20:23:01"
     
-    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    const lines = input.trim().split('\n').map((line: string) => line.trim()).filter((line: string) => line)
     
     if (lines.length < 3) {
       throw new Error('Invalid format: Expected at least 3 lines')
@@ -83,7 +83,7 @@ export function parseJumpBridge(input: string, owner: string): ParsedTimer | nul
     // 1,595 m
     // Reinforced until 2025.08.26 19:16:49"
     
-    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    const lines = input.trim().split('\n').map((line: string) => line.trim()).filter((line: string) => line)
     
     if (lines.length < 3) {
       throw new Error('Invalid format: Expected at least 3 lines')
@@ -174,7 +174,7 @@ export function parseOtherStructure(
     // 3,714 km
     // Reinforced until 2025.08.24 19:25:45"
     
-    const lines = input.trim().split('\n').map(line => line.trim()).filter(line => line)
+    const lines = input.trim().split('\n').map((line: string) => line.trim()).filter((line: string) => line)
     
     if (lines.length < 3) {
       throw new Error('Invalid format: Expected at least 3 lines')

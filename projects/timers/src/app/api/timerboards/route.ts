@@ -36,7 +36,7 @@ export async function GET() {
       },
     })
 
-    const timerboards = userTimerboards.map(ut => ({
+    const timerboards = userTimerboards.map((ut: any) => ({
       id: ut.timerboard.id,
       name: ut.timerboard.name,
       description: ut.timerboard.description,
