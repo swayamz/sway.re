@@ -78,48 +78,65 @@ export async function POST(
       },
     })
 
-    if (existingMembership) {
-      return NextResponse.json({ 
-        error: `${characterName} is already a member of this timerboard with ${existingMembership.role} role` 
-      }, { status: 400 })
-    }
-
     // Add user to timerboard with specified role (default to USER)
     const validRole = role && ['USER', 'MODERATOR'].includes(role) ? role : 'USER'
     
-    // Only site admins can assign MODERATOR role
-    if (validRole === 'MODERATOR' && !userTimerboard.user.isAdmin) {
+    // Site admins can assign any role, moderators can assign MODERATOR or USER roles
+    if (validRole === 'MODERATOR' && !userTimerboard.user.isAdmin && userTimerboard.role !== 'MODERATOR') {
       return NextResponse.json({ 
-        error: 'Only site administrators can assign moderator roles' 
+        error: 'Only site administrators and moderators can assign moderator roles' 
       }, { status: 403 })
     }
 
-    await prisma.userTimerboard.create({
-      data: {
-        userId: targetUser.id,
-        timerboardId,
-        role: validRole,
-      },
-    })
+    let auditAction = 'USER_ADDED'
+    let successMessage = `Successfully added ${characterName} to timerboard with ${validRole} role`
+
+    if (existingMembership) {
+      // User already exists, update their role
+      await prisma.userTimerboard.update({
+        where: {
+          userId_timerboardId: {
+            userId: targetUser.id,
+            timerboardId,
+          },
+        },
+        data: {
+          role: validRole,
+        },
+      })
+
+      auditAction = 'USER_ROLE_UPDATED'
+      successMessage = `Successfully updated ${characterName}'s role from ${existingMembership.role} to ${validRole}`
+    } else {
+      // User doesn't exist, create new membership
+      await prisma.userTimerboard.create({
+        data: {
+          userId: targetUser.id,
+          timerboardId,
+          role: validRole,
+        },
+      })
+    }
 
     // Create audit log entry
     await prisma.auditLog.create({
       data: {
         timerboardId,
         userId,
-        action: 'USER_ADDED',
+        action: auditAction,
         details: JSON.stringify({
-          addedUserId: targetUser.id,
-          addedUserName: targetUser.characterName,
-          role: validRole,
-          addedAt: new Date().toISOString(),
+          targetUserId: targetUser.id,
+          targetUserName: targetUser.characterName,
+          newRole: validRole,
+          previousRole: existingMembership?.role,
+          updatedAt: new Date().toISOString(),
         }),
       },
     })
 
     return NextResponse.json({ 
       success: true,
-      message: `Successfully added ${characterName} to timerboard with ${validRole} role`
+      message: successMessage
     })
   } catch (error) {
     console.error('Error adding user to timerboard:', error)

@@ -135,14 +135,18 @@ export function parseJumpBridge(input: string, owner: string): ParsedTimer | nul
 
 export function parseMercenaryDen(dateInput: string, system: string, planet: string, owner: string): ParsedTimer | null {
   try {
-    // Expected format: "2025.08.26 19:16:49"
-    const dateMatch = dateInput.trim().match(/^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})$/)
+    // Expected format: "2025.08.26 19:16:49" or "2025.08.26 19:16"
+    const dateMatch = dateInput.trim().match(/^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2})(?::(\d{2}))?$/)
     
     if (!dateMatch) {
       throw new Error('Invalid date format')
     }
 
-    const dateStr = dateMatch[1].replace(/\./g, '-')
+    // If seconds are not provided, default to :00
+    const seconds = dateMatch[2] || '00'
+    const fullDateStr = `${dateMatch[1]}:${seconds}`
+    
+    const dateStr = fullDateStr.replace(/\./g, '-')
     const expiresAt = new Date(dateStr + ' UTC')
 
     // Mercenary Dens have a 30-minute active window after the timer expires

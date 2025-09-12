@@ -312,7 +312,7 @@ Reinforced until 2025.08.26 19:16:49"
                     type="text"
                     value={pasteInput}
                     onChange={(e) => setPasteInput(e.target.value)}
-                    placeholder="2025.08.26 19:16:49"
+                    placeholder="2025.09.13 10:32"
                     className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono"
                   />
                 </label>
