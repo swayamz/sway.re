@@ -682,7 +682,7 @@ export default function HomePage() {
                       disabled={userManagementLoading}
                     >
                       <option value="USER">User</option>
-                      {selectedTimerboard?.timerboard.userRole === 'ADMIN' && (
+                      {(selectedTimerboard?.timerboard.userRole === 'ADMIN' || selectedTimerboard?.timerboard.userRole === 'MODERATOR') && (
                         <option value="MODERATOR">Moderator</option>
                       )}
                     </select>
