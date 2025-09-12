@@ -24,7 +24,6 @@ docker-compose stop nginx
 echo "🔑 Obtaining SSL certificates..."
 sudo certbot certonly --standalone \
     -d "$DOMAIN" \
-    -d "www.$DOMAIN" \
     -d "timers.$DOMAIN" \
     --email "$EMAIL" \
     --agree-tos \
