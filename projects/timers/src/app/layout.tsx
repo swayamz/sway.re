@@ -4,8 +4,8 @@ import { Providers } from '@/components/providers'
 import { SignInButton } from '@/components/auth/sign-in-button'
 
 export const metadata: Metadata = {
-  title: 'EVE Online Timers - Sway.re',
-  description: 'EVE Online structure timer management application',
+  title: 'Timerboard - Sway.re',
+  description: 'EVE Online Timerboard',
 }
 
 export default function RootLayout({
