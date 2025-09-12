@@ -14,6 +14,11 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Run Prisma commands before build
+RUN npm run db:generate
+RUN npm run db:migrate
+RUN npm run db:seed
+
 # Build the NextJS app
 RUN npm run build
 
