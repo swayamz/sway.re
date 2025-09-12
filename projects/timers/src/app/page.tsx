@@ -4,20 +4,37 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { AddTimerModal } from '@/components/timers/add-timer-modal'
 import { CampaignsSection } from '@/components/sovereignty/campaigns-section'
+import { 
+  useTimerboards, 
+  useTimerboard, 
+  useTimerboardUsers, 
+  useTimerboardStatistics, 
+  useAuditLogs, 
+  useCampaigns, 
+  useTimerboardMutations,
+  type Timer,
+  type Timerboard,
+  type TimerboardData
+} from '@/hooks/useTimerboards'
+import { LoadingSpinner, InlineLoading } from '@/components/ui/loading-spinner'
+import { LiveIndicator, RefreshingIndicator } from '@/components/ui/live-indicator'
+import { ToastContainer, useToast } from '@/components/ui/toast'
 
 interface TimerboardSelectionProps {
   timerboards: any[]
   onSelectTimerboard: (id: string) => void
   isAdmin: boolean
-  onTimerboardsUpdated: () => void
+  isLoading: boolean
+  toast: any
 }
 
-function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimerboardsUpdated }: TimerboardSelectionProps) {
+function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, isLoading, toast }: TimerboardSelectionProps) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newTimerboardName, setNewTimerboardName] = useState('')
   const [newTimerboardDescription, setNewTimerboardDescription] = useState('')
-  const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState('')
+  
+  const { createTimerboard, deleteTimerboard } = useTimerboardMutations()
   
   const handleCreateTimerboard = async () => {
     if (!newTimerboardName.trim()) {
@@ -25,34 +42,18 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
       return
     }
     
-    setCreateLoading(true)
     setCreateError('')
 
     try {
-      const response = await fetch('/api/timerboards', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: newTimerboardName.trim(),
-          description: newTimerboardDescription.trim() || null,
-        }),
+      await createTimerboard.mutateAsync({
+        name: newTimerboardName,
+        description: newTimerboardDescription || undefined,
       })
-
-      if (response.ok) {
-        setNewTimerboardName('')
-        setNewTimerboardDescription('')
-        setShowCreateModal(false)
-        onTimerboardsUpdated()
-      } else {
-        const errorData = await response.json()
-        setCreateError(errorData.error || 'Failed to create timerboard')
-      }
+      setNewTimerboardName('')
+      setNewTimerboardDescription('')
+      setShowCreateModal(false)
     } catch (error) {
-      setCreateError('Failed to create timerboard')
-    } finally {
-      setCreateLoading(false)
+      setCreateError(error instanceof Error ? error.message : 'Failed to create timerboard')
     }
   }
 
@@ -62,18 +63,9 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
     }
 
     try {
-      const response = await fetch(`/api/timerboards/${timerboardId}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        onTimerboardsUpdated()
-      } else {
-        const errorData = await response.json()
-        alert(errorData.error || 'Failed to delete timerboard')
-      }
+      await deleteTimerboard.mutateAsync(timerboardId)
     } catch (error) {
-      alert('Failed to delete timerboard')
+      alert(error instanceof Error ? error.message : 'Failed to delete timerboard')
     }
   }
 
@@ -100,7 +92,9 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
       )}
 
       {/* Timerboards Grid */}
-      {timerboards.length === 0 ? (
+      {isLoading ? (
+        <InlineLoading message="Loading timerboards..." />
+      ) : timerboards.length === 0 ? (
         <div className="text-center py-12">
           <h3 className="text-xl font-semibold mb-4">No Timerboards Available</h3>
           <p className="text-gray-400">
@@ -189,7 +183,7 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
                   onChange={(e) => setNewTimerboardName(e.target.value)}
                   placeholder="Enter timerboard name"
                   className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                  disabled={createLoading}
+                  disabled={createTimerboard.isPending}
                 />
               </label>
 
@@ -201,17 +195,17 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
                   placeholder="Enter timerboard description (optional)"
                   rows={3}
                   className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                  disabled={createLoading}
+                  disabled={createTimerboard.isPending}
                 />
               </label>
 
               <div className="flex space-x-3 pt-4">
                 <button
                   onClick={handleCreateTimerboard}
-                  disabled={createLoading || !newTimerboardName.trim()}
+                  disabled={createTimerboard.isPending || !newTimerboardName.trim()}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-2 px-4 rounded font-medium"
                 >
-                  {createLoading ? 'Creating...' : 'Create Timerboard'}
+                  {createTimerboard.isPending ? 'Creating...' : 'Create Timerboard'}
                 </button>
                 <button
                   onClick={() => {
@@ -221,7 +215,7 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
                     setNewTimerboardDescription('')
                   }}
                   className="bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded"
-                  disabled={createLoading}
+                  disabled={createTimerboard.isPending}
                 >
                   Cancel
                 </button>
@@ -234,33 +228,6 @@ function TimerboardSelection({ timerboards, onSelectTimerboard, isAdmin, onTimer
   )
 }
 
-interface Timer {
-  id: string
-  structureType: string
-  system: string
-  region: string | null
-  location: string
-  owner: string
-  layer: string | null
-  expiresAt: string
-  activeUntil: string | null
-  notes: string | null
-  isActive: boolean
-  addedBy: string
-  createdAt: string
-}
-
-interface Timerboard {
-  id: string
-  name: string
-  description: string | null
-  userRole: string
-}
-
-interface TimerboardData {
-  timerboard: Timerboard
-  timers: Timer[]
-}
 
 function formatTimeUntil(timer: Timer, isPast: boolean = false): string {
   const now = new Date()
@@ -301,23 +268,35 @@ function formatStructureType(structureType: string): string {
 export default function HomePage() {
   const { data: session, status } = useSession()
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [timerboards, setTimerboards] = useState<any[]>([])
-  const [selectedTimerboard, setSelectedTimerboard] = useState<TimerboardData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [selectedTimerboardId, setSelectedTimerboardId] = useState<string | null>(null)
   const [showAddTimer, setShowAddTimer] = useState(false)
   const [showPastTimers, setShowPastTimers] = useState(false)
   const [showManageBoard, setShowManageBoard] = useState(false)
   const [newUserName, setNewUserName] = useState('')
   const [newUserRole, setNewUserRole] = useState('USER')
-  const [timerboardUsers, setTimerboardUsers] = useState<any[]>([])
-  const [userManagementLoading, setUserManagementLoading] = useState(false)
   const [userManagementError, setUserManagementError] = useState('')
-  const [statistics, setStatistics] = useState<any>(null)
-  const [auditLogs, setAuditLogs] = useState<any[]>([])
-  const [statisticsLoading, setStatisticsLoading] = useState(false)
-  const [campaigns, setCampaigns] = useState<any[]>([])
-  const [regions, setRegions] = useState<string[]>([])
-  const [campaignsLoading, setCampaignsLoading] = useState(false)
+  
+  // React Query hooks
+  const timerboardsQuery = useTimerboards()
+  const timerboardQuery = useTimerboard(selectedTimerboardId)
+  const timerboardUsersQuery = useTimerboardUsers(showManageBoard ? selectedTimerboardId : null)
+  const statisticsQuery = useTimerboardStatistics(showManageBoard ? selectedTimerboardId : null)
+  const auditLogsQuery = useAuditLogs(showManageBoard ? selectedTimerboardId : null)
+  const { regions, campaigns, campaignsLoading } = useCampaigns(selectedTimerboardId)
+  
+  // Mutations
+  const { deleteTimer, repairTimer, addUser, removeUser } = useTimerboardMutations()
+  
+  // Toast notifications
+  const toast = useToast()
+  
+  // Extracted data
+  const timerboards = timerboardsQuery.data || []
+  const selectedTimerboard = timerboardQuery.data
+  const timerboardUsers = timerboardUsersQuery.data || []
+  const statistics = statisticsQuery.data
+  const auditLogs = auditLogsQuery.data || []
+  const loading = timerboardQuery.isLoading
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -327,96 +306,22 @@ export default function HomePage() {
     return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      fetchTimerboards()
-    }
-  }, [status])
-
-  const fetchTimerboards = async () => {
-    try {
-      const response = await fetch('/api/timerboards')
-      if (response.ok) {
-        const boards = await response.json()
-        setTimerboards(boards)
-        // Don't auto-select timerboard - let user choose
-      }
-    } catch (error) {
-      console.error('Error fetching timerboards:', error)
-    }
+  const handleSelectTimerboard = (id: string) => {
+    setSelectedTimerboardId(id)
   }
-
-  const fetchTimerboard = async (id: string) => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/timerboards/${id}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSelectedTimerboard(data)
-        // Fetch regions and campaigns for this timerboard
-        await fetchRegionsAndCampaigns(id)
-      }
-    } catch (error) {
-      console.error('Error fetching timerboard:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchRegionsAndCampaigns = async (timerboardId: string) => {
-    try {
-      // Fetch regions
-      const regionsResponse = await fetch(`/api/timerboards/${timerboardId}/regions`)
-      if (regionsResponse.ok) {
-        const regionsData = await regionsResponse.json()
-        const timerboardRegions = regionsData.regions || []
-        setRegions(timerboardRegions)
-        
-        // Fetch campaigns if there are regions
-        if (timerboardRegions.length > 0) {
-          setCampaignsLoading(true)
-          try {
-            const campaignsResponse = await fetch(`/api/sovereignty/campaigns?regions=${timerboardRegions.join(',')}`)
-            if (campaignsResponse.ok) {
-              const campaignsData = await campaignsResponse.json()
-              // Sort campaigns by start time
-              const sortedCampaigns = campaignsData.sort((a: any, b: any) => 
-                new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-              )
-              setCampaigns(sortedCampaigns)
-            } else {
-              setCampaigns([])
-            }
-          } finally {
-            setCampaignsLoading(false)
-          }
-        } else {
-          setCampaigns([])
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching regions and campaigns:', error)
-      setCampaigns([])
-      setRegions([])
-      setCampaignsLoading(false)
-    }
+  
+  const handleBackToTimerboards = () => {
+    setSelectedTimerboardId(null)
+    setShowManageBoard(false)
+    setShowPastTimers(false)
   }
 
   const handleManualRepair = async (timerId: string) => {
     try {
-      const response = await fetch(`/api/timers/${timerId}/repair`, {
-        method: 'POST',
-      })
-      
-      if (response.ok) {
-        // Refresh timerboard data to update the display
-        if (selectedTimerboard) {
-          fetchTimerboard(selectedTimerboard.timerboard.id)
-        }
-      } else {
-        console.error('Failed to repair timer')
-      }
+      await repairTimer.mutateAsync(timerId)
+      toast.success('Timer repaired successfully')
     } catch (error) {
+      toast.error('Failed to repair timer', error instanceof Error ? error.message : 'Unknown error')
       console.error('Error repairing timer:', error)
     }
   }
@@ -427,100 +332,33 @@ export default function HomePage() {
     }
 
     try {
-      const response = await fetch(`/api/timers/${timerId}`, {
-        method: 'DELETE',
-      })
-      
-      if (response.ok) {
-        // Refresh timerboard data to update the display
-        if (selectedTimerboard) {
-          fetchTimerboard(selectedTimerboard.timerboard.id)
-        }
-      } else {
-        console.error('Failed to delete timer')
-      }
+      await deleteTimer.mutateAsync(timerId)
+      toast.success('Timer deleted successfully')
     } catch (error) {
+      toast.error('Failed to delete timer', error instanceof Error ? error.message : 'Unknown error')
       console.error('Error deleting timer:', error)
     }
   }
 
-  const fetchTimerboardUsers = async () => {
-    if (!selectedTimerboard) return
-    
-    try {
-      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/users`)
-      if (response.ok) {
-        const data = await response.json()
-        setTimerboardUsers(data.users)
-      }
-    } catch (error) {
-      console.error('Error fetching timerboard users:', error)
-    }
-  }
-
-  const fetchStatistics = async () => {
-    if (!selectedTimerboard) return
-    
-    setStatisticsLoading(true)
-    try {
-      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/statistics`)
-      if (response.ok) {
-        const data = await response.json()
-        setStatistics(data)
-      }
-    } catch (error) {
-      console.error('Error fetching statistics:', error)
-    } finally {
-      setStatisticsLoading(false)
-    }
-  }
-
-  const fetchAuditLogs = async () => {
-    if (!selectedTimerboard) return
-    
-    try {
-      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/audit-logs`)
-      if (response.ok) {
-        const data = await response.json()
-        setAuditLogs(data.auditLogs)
-      }
-    } catch (error) {
-      console.error('Error fetching audit logs:', error)
-    }
-  }
 
   const handleAddUser = async () => {
-    if (!newUserName.trim() || !selectedTimerboard) return
+    if (!newUserName.trim() || !selectedTimerboardId) return
     
-    setUserManagementLoading(true)
     setUserManagementError('')
 
     try {
-      const response = await fetch(`/api/timerboards/${selectedTimerboard.timerboard.id}/users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          characterName: newUserName.trim(),
-          role: newUserRole,
-        }),
+      await addUser.mutateAsync({
+        timerboardId: selectedTimerboardId,
+        characterName: newUserName,
+        role: newUserRole,
       })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setNewUserName('')
-        setNewUserRole('USER')
-        fetchTimerboardUsers() // Refresh the user list
-      } else {
-        setUserManagementError(data.error || 'Failed to add user')
-      }
+      setNewUserName('')
+      setNewUserRole('USER')
+      toast.success(`Added ${newUserName} to timerboard`)
     } catch (error) {
-      console.error('Error adding user:', error)
-      setUserManagementError('Failed to add user')
-    } finally {
-      setUserManagementLoading(false)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add user'
+      setUserManagementError(errorMessage)
+      toast.error('Failed to add user', errorMessage)
     }
   }
 
@@ -529,38 +367,20 @@ export default function HomePage() {
       return
     }
 
+    if (!selectedTimerboardId) return
+
     try {
-      const response = await fetch(`/api/timerboards/${selectedTimerboard?.timerboard.id}/users`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          characterName: characterName,
-        }),
+      await removeUser.mutateAsync({
+        timerboardId: selectedTimerboardId,
+        characterName,
       })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        fetchTimerboardUsers() // Refresh the user list
-      } else {
-        alert(data.error || 'Failed to remove user')
-      }
+      toast.success(`Removed ${characterName} from timerboard`)
     } catch (error) {
-      console.error('Error removing user:', error)
-      alert('Failed to remove user')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove user'
+      toast.error('Failed to remove user', errorMessage)
     }
   }
 
-  // Fetch timerboard users, statistics, and audit logs when manage board is shown
-  useEffect(() => {
-    if (showManageBoard && selectedTimerboard) {
-      fetchTimerboardUsers()
-      fetchStatistics()
-      fetchAuditLogs()
-    }
-  }, [showManageBoard, selectedTimerboard])
 
   if (status === 'loading') {
     return (
@@ -586,13 +406,10 @@ export default function HomePage() {
     return (
       <TimerboardSelection 
         timerboards={timerboards} 
-        onSelectTimerboard={fetchTimerboard}
+        onSelectTimerboard={handleSelectTimerboard}
         isAdmin={(session?.user as any)?.isAdmin || false}
-        onTimerboardsUpdated={() => {
-          // Clear selection when timerboards are updated (like after deletion)
-          setSelectedTimerboard(null)
-          fetchTimerboards()
-        }}
+        isLoading={timerboardsQuery.isLoading}
+        toast={toast}
       />
     )
   }
@@ -639,11 +456,7 @@ export default function HomePage() {
   const totalPastCount = pastEvents.length
   
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-green-400 border-t-transparent"></div>
-      </div>
-    )
+    return <InlineLoading message="Loading timerboard..." />
   }
 
   return (
@@ -655,7 +468,7 @@ export default function HomePage() {
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-2">
                 <button 
-                  onClick={() => setSelectedTimerboard(null)}
+                  onClick={handleBackToTimerboards}
                   className="text-green-400 hover:text-green-300 text-sm"
                 >
                   ← Back to Timerboards
@@ -670,6 +483,13 @@ export default function HomePage() {
               <p className="text-gray-400 mt-1">{selectedTimerboard.timerboard.description}</p>
             </div>
             <div className="text-right text-sm text-gray-400">
+              <div className="flex items-center justify-end space-x-3 mb-1">
+                <LiveIndicator 
+                  isLive={!timerboardQuery.isError} 
+                  lastUpdated={timerboardQuery.dataUpdatedAt ? new Date(timerboardQuery.dataUpdatedAt) : undefined}
+                />
+                <RefreshingIndicator isRefreshing={timerboardQuery.isFetching} />
+              </div>
               <div>Current Time (UTC)</div>
               <div className="font-mono text-white">{formatDateTime(currentTime)}</div>
             </div>
@@ -725,7 +545,10 @@ export default function HomePage() {
           <div className="p-6 space-y-6">
             {/* User Management Section */}
             <div className="space-y-4">
-              <h4 className="text-md font-semibold">User Management</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-md font-semibold">User Management</h4>
+                <RefreshingIndicator isRefreshing={timerboardUsersQuery.isFetching && !timerboardUsersQuery.isLoading} />
+              </div>
               <div className="bg-gray-900 rounded-lg p-4">
                 <p className="text-gray-400 text-sm mb-4">
                   Add users to this timerboard by entering their EVE character name
@@ -743,13 +566,13 @@ export default function HomePage() {
                       value={newUserName}
                       onChange={(e) => setNewUserName(e.target.value)}
                       className="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                      disabled={userManagementLoading}
+                      disabled={addUser.isPending}
                     />
                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value)}
                       className="p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                      disabled={userManagementLoading}
+                      disabled={addUser.isPending}
                     >
                       <option value="USER">User</option>
                       {(selectedTimerboard?.timerboard.userRole === 'ADMIN' || selectedTimerboard?.timerboard.userRole === 'MODERATOR') && (
@@ -758,10 +581,10 @@ export default function HomePage() {
                     </select>
                     <button 
                       onClick={handleAddUser}
-                      disabled={userManagementLoading || !newUserName.trim()}
+                      disabled={addUser.isPending || !newUserName.trim()}
                       className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded"
                     >
-                      {userManagementLoading ? 'Adding...' : 'Add User'}
+                      {addUser.isPending ? 'Adding...' : 'Add User'}
                     </button>
                   </div>
                 </div>
@@ -821,11 +644,12 @@ export default function HomePage() {
 
             {/* Statistics Section */}
             <div className="space-y-4">
-              <h4 className="text-md font-semibold">Statistics</h4>
-              {statisticsLoading ? (
-                <div className="text-center py-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-green-400 border-t-transparent mx-auto"></div>
-                </div>
+              <div className="flex items-center justify-between">
+                <h4 className="text-md font-semibold">Statistics</h4>
+                <RefreshingIndicator isRefreshing={statisticsQuery.isFetching && !statisticsQuery.isLoading} />
+              </div>
+              {statisticsQuery.isLoading ? (
+                <InlineLoading message="Loading statistics..." />
               ) : statistics ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -894,7 +718,10 @@ export default function HomePage() {
 
             {/* Audit Log Section */}
             <div className="space-y-4">
-              <h4 className="text-md font-semibold">Recent Activity</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-md font-semibold">Recent Activity</h4>
+                <RefreshingIndicator isRefreshing={auditLogsQuery.isFetching && !auditLogsQuery.isLoading} />
+              </div>
               <div className="bg-gray-900 rounded-lg p-4">
                 {auditLogs.length > 0 ? (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -952,15 +779,23 @@ export default function HomePage() {
         /* Timer List */
         <div className="bg-gray-800 rounded-lg border border-gray-700">
           <div className="p-4 border-b border-gray-700">
-            <h3 className="text-lg font-semibold">
-              {showPastTimers 
-                ? `Past Events (${totalPastCount})`
-                : `Upcoming Events (${totalUpcomingCount})`
-              }
-            </h3>
-            {campaignsLoading && (
-              <p className="text-xs text-gray-400 mt-1">Loading sovereignty campaigns...</p>
-            )}
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                {showPastTimers 
+                  ? `Past Events (${totalPastCount})`
+                  : `Upcoming Events (${totalUpcomingCount})`
+                }
+              </h3>
+              <div className="flex items-center space-x-3">
+                {campaignsLoading && (
+                  <div className="flex items-center space-x-2 text-purple-400">
+                    <LoadingSpinner size="small" />
+                    <span className="text-xs">Loading campaigns...</span>
+                  </div>
+                )}
+                <RefreshingIndicator isRefreshing={timerboardQuery.isFetching} />
+              </div>
+            </div>
           </div>
           
           {totalUpcomingCount === 0 && totalPastCount === 0 && !campaignsLoading ? (
@@ -1134,19 +969,29 @@ export default function HomePage() {
                               (timer.structureType === 'JUMP_BRIDGE' || timer.structureType === 'MERCENARY_DEN') && (
                               <button
                                 onClick={() => handleManualRepair(timer.id)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium"
+                                disabled={repairTimer.isPending}
+                                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-xs font-medium flex items-center space-x-1"
                               >
-                                Repaired
+                                {repairTimer.isPending && repairTimer.variables === timer.id ? (
+                                  <LoadingSpinner size="small" />
+                                ) : (
+                                  <span>Repaired</span>
+                                )}
                               </button>
                             )}
                             {/* Delete Button - only show for moderators and admins */}
                             {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && (
                               <button
                                 onClick={() => handleDeleteTimer(timer.id)}
-                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-medium"
+                                disabled={deleteTimer.isPending}
+                                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-xs font-medium flex items-center space-x-1"
                                 title="Delete timer permanently"
                               >
-                                Delete
+                                {deleteTimer.isPending && deleteTimer.variables === timer.id ? (
+                                  <LoadingSpinner size="small" />
+                                ) : (
+                                  <span>Delete</span>
+                                )}
                               </button>
                             )}
                           </div>
@@ -1167,11 +1012,18 @@ export default function HomePage() {
           isOpen={showAddTimer}
           onClose={() => setShowAddTimer(false)}
           timerboardId={selectedTimerboard.timerboard.id}
+          toast={toast}
           onTimerAdded={() => {
-            fetchTimerboard(selectedTimerboard.timerboard.id)
+            // React Query will automatically refetch
           }}
         />
       )}
+      
+      {/* Toast Notifications */}
+      <ToastContainer 
+        toasts={toast.toasts} 
+        onRemoveToast={toast.removeToast} 
+      />
     </div>
   )
 }

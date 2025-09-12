@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { parseOrbitalSkyhook, parseJumpBridge, parseMercenaryDen, parseOtherStructure } from '@/lib/timer-parsers'
 
 interface AddTimerModalProps {
@@ -8,9 +9,10 @@ interface AddTimerModalProps {
   onClose: () => void
   timerboardId: string
   onTimerAdded: () => void
+  toast?: any
 }
 
-export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded }: AddTimerModalProps) {
+export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toast }: AddTimerModalProps) {
   const [structureType, setStructureType] = useState('')
   const [pasteInput, setPasteInput] = useState('')
   const [owner, setOwner] = useState('')
@@ -21,6 +23,8 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded }: A
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState(1)
+  
+  const queryClient = useQueryClient()
 
   if (!isOpen) return null
 
@@ -110,11 +114,23 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded }: A
         throw new Error(errorData.error || 'Failed to create timer')
       }
 
-      // Success
+      // Success - invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['timerboard', timerboardId] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', timerboardId] })
+      
+      if (toast) {
+        toast.success('Timer added successfully')
+      }
+      
       onTimerAdded()
       handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMessage)
+      
+      if (toast) {
+        toast.error('Failed to add timer', errorMessage)
+      }
     } finally {
       setLoading(false)
     }
