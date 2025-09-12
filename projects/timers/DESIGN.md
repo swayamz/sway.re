@@ -102,3 +102,36 @@ Reinforced until 2025.08.14 17:07:35
 "
 
 RT64-C is the system where the structure is located. Borderpatrol Omega is the name of the structure. The timer should stay active for a 15 minute repair stage. That is for 15 mins from 17:07:35 the timer should say "Active Now". After which the timer should be moved to past timers.
+
+## Sovereignty Campaigns
+Under manage board for a board, moderators should be able to add region names where we want to track sovereignty campaigns for that region on the timerboard. 
+
+
+Read this link to see a Eve online ESI for sovereignty campaign:
+https://developers.eveonline.com/api-explorer#/operations/GetSovereigntyCampaigns
+
+● The API returns an array of active sovereignty campaigns in EVE Online. Here's what the        
+  current data shows:
+
+  Active Campaigns (10 total):
+  - All are "ihub_defense" event types (Infrastructure Hub defense campaigns)
+  - Campaign IDs range from 108372-108381
+  - All show 0.4 attackers_score vs 0.6 defender_score (defenders currently winning)
+  - Start times span from today (2025-09-12) through tomorrow (2025-09-13)
+  - Various solar systems and constellations across different regions
+  - Different defending alliance IDs (99012786, 99012042, 99002003, 1354830081)
+
+  Key fields returned:
+  - campaign_id: Unique identifier for each campaign
+  - attackers_score/defender_score: Current progress (0.0-1.0 scale)
+  - event_type: Type of sovereignty event
+  - solar_system_id: Where the campaign is taking place
+  - constellation_id: Constellation containing the system
+  - defender_id: Alliance ID of the defending party
+  - structure_id: Specific structure being contested
+  - start_time: When the campaign began (ISO 8601 format)
+
+Read this link to see how to resolve the ids to names:
+https://developers.eveonline.com/api-explorer#/operations/PostUniverseNames
+
+On the timerboard for regions which we care about, we need to list the sovereignty campaigns, including the current scores if the campaign is active.

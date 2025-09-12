@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { AddTimerModal } from '@/components/timers/add-timer-modal'
+import { CampaignsSection } from '@/components/sovereignty/campaigns-section'
 
 interface TimerboardSelectionProps {
   timerboards: any[]
@@ -266,7 +267,7 @@ function formatTimeUntil(timer: Timer, isPast: boolean = false): string {
   const expiresAt = new Date(timer.expiresAt)
   const activeUntil = timer.activeUntil ? new Date(timer.activeUntil) : null
   
-  // If timer has expired but is still in active window, show "Active Now"
+  // Check if timer has expired but is still in active window
   if (!isPast && activeUntil && expiresAt <= now && now <= activeUntil) {
     return 'Active Now'
   }
@@ -314,6 +315,9 @@ export default function HomePage() {
   const [statistics, setStatistics] = useState<any>(null)
   const [auditLogs, setAuditLogs] = useState<any[]>([])
   const [statisticsLoading, setStatisticsLoading] = useState(false)
+  const [campaigns, setCampaigns] = useState<any[]>([])
+  const [regions, setRegions] = useState<string[]>([])
+  const [campaignsLoading, setCampaignsLoading] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -349,11 +353,52 @@ export default function HomePage() {
       if (response.ok) {
         const data = await response.json()
         setSelectedTimerboard(data)
+        // Fetch regions and campaigns for this timerboard
+        await fetchRegionsAndCampaigns(id)
       }
     } catch (error) {
       console.error('Error fetching timerboard:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchRegionsAndCampaigns = async (timerboardId: string) => {
+    try {
+      // Fetch regions
+      const regionsResponse = await fetch(`/api/timerboards/${timerboardId}/regions`)
+      if (regionsResponse.ok) {
+        const regionsData = await regionsResponse.json()
+        const timerboardRegions = regionsData.regions || []
+        setRegions(timerboardRegions)
+        
+        // Fetch campaigns if there are regions
+        if (timerboardRegions.length > 0) {
+          setCampaignsLoading(true)
+          try {
+            const campaignsResponse = await fetch(`/api/sovereignty/campaigns?regions=${timerboardRegions.join(',')}`)
+            if (campaignsResponse.ok) {
+              const campaignsData = await campaignsResponse.json()
+              // Sort campaigns by start time
+              const sortedCampaigns = campaignsData.sort((a: any, b: any) => 
+                new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+              )
+              setCampaigns(sortedCampaigns)
+            } else {
+              setCampaigns([])
+            }
+          } finally {
+            setCampaignsLoading(false)
+          }
+        } else {
+          setCampaigns([])
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching regions and campaigns:', error)
+      setCampaigns([])
+      setRegions([])
+      setCampaignsLoading(false)
     }
   }
 
@@ -552,21 +597,46 @@ export default function HomePage() {
     )
   }
 
-  const upcomingTimers = selectedTimerboard ? selectedTimerboard.timers
-    .filter(timer => {
-      const expiredTime = new Date(timer.expiresAt)
-      const activeUntil = timer.activeUntil ? new Date(timer.activeUntil) : expiredTime
+  // Convert campaigns to unified timer format for sorting
+  const campaignTimers = campaigns.map(campaign => ({
+    id: `campaign-${campaign.campaign_id}`,
+    expiresAt: campaign.start_time,
+    isCampaign: true,
+    campaign: campaign
+  }))
+  
+  const regularTimers = selectedTimerboard ? selectedTimerboard.timers.map(timer => ({
+    ...timer,
+    isCampaign: false
+  })) : []
+  
+  // Combine and sort all events by time
+  const allEvents = [...regularTimers, ...campaignTimers]
+  
+  const upcomingEvents = allEvents
+    .filter(event => {
+      if (event.isCampaign) {
+        return new Date(event.expiresAt) > currentTime
+      }
+      const expiredTime = new Date(event.expiresAt)
+      const activeUntil = event.activeUntil ? new Date(event.activeUntil) : expiredTime
       return activeUntil > currentTime
     })
-    .sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime()) : []
+    .sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime())
     
-  const pastTimers = selectedTimerboard ? selectedTimerboard.timers
-    .filter(timer => {
-      const expiredTime = new Date(timer.expiresAt)
-      const activeUntil = timer.activeUntil ? new Date(timer.activeUntil) : expiredTime
+  const pastEvents = allEvents
+    .filter(event => {
+      if (event.isCampaign) {
+        return new Date(event.expiresAt) <= currentTime
+      }
+      const expiredTime = new Date(event.expiresAt)
+      const activeUntil = event.activeUntil ? new Date(event.activeUntil) : expiredTime
       return activeUntil <= currentTime
     })
-    .sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime()) : []
+    .sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime())
+  
+  const totalUpcomingCount = upcomingEvents.length
+  const totalPastCount = pastEvents.length
   
   if (loading) {
     return (
@@ -816,6 +886,12 @@ export default function HomePage() {
               )}
             </div>
 
+            {/* Sovereignty Campaigns Region Management */}
+            <CampaignsSection 
+              timerboardId={selectedTimerboard?.timerboard.id || ''}
+              isModeratorOrAdmin={selectedTimerboard?.timerboard.userRole === 'ADMIN' || selectedTimerboard?.timerboard.userRole === 'MODERATOR'}
+            />
+
             {/* Audit Log Section */}
             <div className="space-y-4">
               <h4 className="text-md font-semibold">Recent Activity</h4>
@@ -833,6 +909,7 @@ export default function HomePage() {
                               {log.action === 'TIMER_REPAIRED' && 'repaired timer'}
                               {log.action === 'USER_ADDED' && 'added user'}
                               {log.action === 'USER_REMOVED' && 'removed user'}
+                              {log.action === 'UPDATE_REGIONS' && 'updated regions'}
                             </span>
                             {log.details && (
                               <div className="text-gray-400 text-xs mt-1">
@@ -848,6 +925,9 @@ export default function HomePage() {
                                 )}
                                 {log.action === 'USER_REMOVED' && log.details.removedUserName && (
                                   <span>User: {log.details.removedUserName}</span>
+                                )}
+                                {log.action === 'UPDATE_REGIONS' && log.details && (
+                                  <span>Regions: {log.details.regions?.join(', ') || 'N/A'}</span>
                                 )}
                               </div>
                             )}
@@ -874,85 +954,208 @@ export default function HomePage() {
           <div className="p-4 border-b border-gray-700">
             <h3 className="text-lg font-semibold">
               {showPastTimers 
-                ? `Past Timers (${pastTimers.length})`
-                : `Upcoming Timers (${upcomingTimers.length})`
+                ? `Past Events (${totalPastCount})`
+                : `Upcoming Events (${totalUpcomingCount})`
               }
             </h3>
+            {campaignsLoading && (
+              <p className="text-xs text-gray-400 mt-1">Loading sovereignty campaigns...</p>
+            )}
           </div>
           
-          {(showPastTimers ? pastTimers : upcomingTimers).length === 0 ? (
+          {totalUpcomingCount === 0 && totalPastCount === 0 && !campaignsLoading ? (
             <div className="text-center py-12 text-gray-400">
-              {showPastTimers ? 'No past timers' : 'No upcoming timers'}
+              {showPastTimers ? 'No past events' : 'No upcoming events'}
             </div>
           ) : (
             <div className="divide-y divide-gray-700">
-              {(showPastTimers ? pastTimers : upcomingTimers).map((timer) => (
-                <div key={timer.id} className="p-4 hover:bg-gray-750 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center space-x-4">
-                        <span className="font-mono text-sm text-gray-300 bg-gray-900 px-2 py-1 rounded">
-                          {formatDateTime(new Date(timer.expiresAt))}
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white font-medium">
-                            {formatStructureType(timer.structureType)}
-                          </span>
-                          <span className="text-gray-300">
-                            ({timer.system} [{timer.region || 'Unknown'}] {timer.location})
-                          </span>
-                          <span className="text-blue-400 font-medium">
-                            [{timer.owner}]
-                          </span>
-                          {timer.layer && (
-                            <span className="bg-orange-600 text-white px-2 py-0.5 rounded text-xs font-medium">
-                              {timer.layer}
-                            </span>
-                          )}
+              {(showPastTimers ? pastEvents : upcomingEvents).map((event) => {
+                if (event.isCampaign) {
+                  // Render campaign event
+                  const campaign = event.campaign
+                  const formatEventType = (eventType: string): string => {
+                    return eventType.replace(/_/g, ' ').toLowerCase()
+                      .replace(/\b\w/g, l => l.toUpperCase())
+                  }
+                  
+                  const getTimeUntilCampaign = (): string => {
+                    const startTime = new Date(campaign.start_time)
+                    const diffMs = Math.abs(startTime.getTime() - currentTime.getTime())
+                    
+                    if (!showPastTimers && startTime.getTime() <= currentTime.getTime()) {
+                      return 'Active Now'
+                    }
+                    
+                    const diffMinutes = Math.floor(diffMs / (1000 * 60))
+                    const diffHours = Math.floor(diffMinutes / 60)
+                    const diffDays = Math.floor(diffHours / 24)
+                    
+                    if (diffDays > 0) {
+                      return `${diffDays}d ${diffHours % 24}h ${diffMinutes % 60}m`
+                    } else if (diffHours > 0) {
+                      return `${diffHours}h ${diffMinutes % 60}m`
+                    } else {
+                      return `${diffMinutes}m`
+                    }
+                  }
+                  
+                  const isCampaignActive = (): boolean => {
+                    const startTime = new Date(campaign.start_time)
+                    return startTime.getTime() <= currentTime.getTime()
+                  }
+                  
+                  const getScoreDisplay = (): JSX.Element | null => {
+                    if (!isCampaignActive() || campaign.attackers_score === undefined || campaign.defender_score === undefined) {
+                      return null
+                    }
+                    
+                    const attackerPercentage = (campaign.attackers_score * 100).toFixed(1)
+                    const defenderPercentage = (campaign.defender_score * 100).toFixed(1)
+                    const attackerWinning = campaign.attackers_score > campaign.defender_score
+                    const defenderWinning = campaign.defender_score > campaign.attackers_score
+                    
+                    return (
+                      <div className="flex items-center space-x-3 text-sm mt-2">
+                        <div className={`px-2 py-1 rounded ${
+                          attackerWinning ? 'bg-red-900 text-red-200' : 'bg-gray-800 text-gray-300'
+                        }`}>
+                          Attackers: {attackerPercentage}%
+                        </div>
+                        <div className={`px-2 py-1 rounded ${
+                          defenderWinning ? 'bg-green-900 text-green-200' : 'bg-gray-800 text-gray-300'
+                        }`}>
+                          Defenders: {defenderPercentage}%
                         </div>
                       </div>
-                      <div className="flex items-center space-x-4 text-xs text-gray-400">
-                        <span>Added by: {timer.addedBy}</span>
-                        {timer.notes && (
-                          <span className="italic">&quot;{timer.notes}&quot;</span>
-                        )}
+                    )
+                  }
+                  
+                  return (
+                    <div key={event.id} className="p-4 hover:bg-gray-750 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center space-x-4">
+                            <span className="font-mono text-sm text-gray-300 bg-gray-900 px-2 py-1 rounded">
+                              {formatDateTime(new Date(campaign.start_time))}
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-white font-medium">
+                                {formatEventType("Sov Campaign")}
+                              </span>
+                              <span className="text-gray-300">
+                                ({campaign.solar_system_name || `System ${campaign.solar_system_id}`})
+                              </span>
+                              {campaign.region_name && (
+                                <span className="text-gray-400">[{campaign.region_name}]</span>
+                              )}
+                              {campaign.defender_name && (
+                                <span className="text-blue-400 font-medium">
+                                  [{campaign.defender_name}]
+                                </span>
+                              )}
+                              <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs font-medium">
+                                ENTOSIS
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-4 text-xs text-gray-400">
+                            <span>Campaign #{campaign.campaign_id}</span>
+                            {isCampaignActive() && (
+                              <span className="text-purple-400 font-medium uppercase tracking-wide">ACTIVE</span>
+                            )}
+                          </div>
+                          
+                          {getScoreDisplay()}
+                        </div>
+                        
+                        <div className="text-right ml-4 flex flex-col items-end space-y-2">
+                          <div className={`font-bold text-lg ${
+                            showPastTimers ? 'text-red-400' : (
+                              getTimeUntilCampaign() === 'Active Now' ? 'text-purple-400' : 'text-green-400'
+                            )
+                          }`}>
+                            {getTimeUntilCampaign()}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {showPastTimers ? 'ago' : (getTimeUntilCampaign() === 'Active Now' ? '' : 'from now')}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right ml-4 flex flex-col items-end space-y-2">
-                      <div className={`font-bold text-lg ${
-                        showPastTimers ? 'text-red-400' : (formatTimeUntil(timer, showPastTimers) === 'Active Now' ? 'text-orange-400' : 'text-green-400')
-                      }`}>
-                        {formatTimeUntil(timer, showPastTimers)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {showPastTimers ? 'ago' : 'from now'}
-                      </div>
-                      <div className="flex space-x-2">
-                        {/* Manual Repair Button - only show for Jump Bridges and Mercenary Dens during active window */}
-                        {!showPastTimers && formatTimeUntil(timer, showPastTimers) === 'Active Now' && 
-                          (timer.structureType === 'JUMP_BRIDGE' || timer.structureType === 'MERCENARY_DEN') && (
-                          <button
-                            onClick={() => handleManualRepair(timer.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium"
-                          >
-                            Repaired
-                          </button>
-                        )}
-                        {/* Delete Button - only show for moderators and admins */}
-                        {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && (
-                          <button
-                            onClick={() => handleDeleteTimer(timer.id)}
-                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-medium"
-                            title="Delete timer permanently"
-                          >
-                            Delete
-                          </button>
-                        )}
+                  )
+                } else {
+                  // Render regular timer event
+                  const timer = event
+                  return (
+                    <div key={timer.id} className="p-4 hover:bg-gray-750 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center space-x-4">
+                            <span className="font-mono text-sm text-gray-300 bg-gray-900 px-2 py-1 rounded">
+                              {formatDateTime(new Date(timer.expiresAt))}
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-white font-medium">
+                                {formatStructureType(timer.structureType)}
+                              </span>
+                              <span className="text-gray-300">
+                                ({timer.system} [{timer.region || 'Unknown'}] {timer.location})
+                              </span>
+                              <span className="text-blue-400 font-medium">
+                                [{timer.owner}]
+                              </span>
+                              {timer.layer && (
+                                <span className="bg-orange-600 text-white px-2 py-0.5 rounded text-xs font-medium">
+                                  {timer.layer}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4 text-xs text-gray-400">
+                            <span>Added by: {timer.addedBy}</span>
+                            {timer.notes && (
+                              <span className="italic">&quot;{timer.notes}&quot;</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right ml-4 flex flex-col items-end space-y-2">
+                          <div className={`font-bold text-lg ${
+                            showPastTimers ? 'text-red-400' : (formatTimeUntil(timer, showPastTimers) === 'Active Now' ? 'text-orange-400' : 'text-green-400')
+                          }`}>
+                            {formatTimeUntil(timer, showPastTimers)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {showPastTimers ? 'ago' : 'from now'}
+                          </div>
+                          <div className="flex space-x-2">
+                            {/* Manual Repair Button - only show for Jump Bridges and Mercenary Dens during active window */}
+                            {!showPastTimers && formatTimeUntil(timer, showPastTimers) === 'Active Now' && 
+                              (timer.structureType === 'JUMP_BRIDGE' || timer.structureType === 'MERCENARY_DEN') && (
+                              <button
+                                onClick={() => handleManualRepair(timer.id)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium"
+                              >
+                                Repaired
+                              </button>
+                            )}
+                            {/* Delete Button - only show for moderators and admins */}
+                            {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && (
+                              <button
+                                onClick={() => handleDeleteTimer(timer.id)}
+                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-medium"
+                                title="Delete timer permanently"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  )
+                }
+              })}
             </div>
           )}
         </div>
