@@ -21,7 +21,7 @@ export default function RootLayout({
             <header className="bg-gray-800 border-b border-gray-700">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                 <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-bold text-green-400">EVE Timers</h1>
+                  <h1 className="text-2xl font-bold text-green-400">Timerboard</h1>
                   <SignInButton />
                 </div>
               </div>
@@ -31,7 +31,7 @@ export default function RootLayout({
             </main>
             <footer className="bg-gray-800 border-t border-gray-700 mt-auto">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-gray-400">
-                <p>Part of <strong className="text-white">sway.re</strong> - A collection of useful tools</p>
+                <p>© 2025 sway.re</p>
               </div>
             </footer>
           </div>

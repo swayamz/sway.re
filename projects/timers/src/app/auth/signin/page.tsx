@@ -30,7 +30,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="bg-gray-800 p-8 rounded-lg max-w-md w-full text-center">
-        <h1 className="text-2xl font-bold mb-4">Sign in to EVE Timers</h1>
+        <h1 className="text-2xl font-bold mb-4">Sign in to Timerboard</h1>
         <p className="text-gray-400 mb-8">
           Sign in with your EVE Online character to access timer boards and manage structure timers.
         </p>
@@ -51,10 +51,6 @@ export default function SignInPage() {
             </>
           )}
         </button>
-        
-        <p className="text-xs text-gray-500 mt-6">
-          This application requires EVE Online SSO authentication to verify your character identity.
-        </p>
       </div>
     </div>
   )

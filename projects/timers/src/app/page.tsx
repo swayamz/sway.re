@@ -528,21 +528,10 @@ export default function HomePage() {
   if (status === 'unauthenticated') {
     return (
       <div className="text-center py-12">
-        <h2 className="text-2xl font-bold mb-4">Welcome to EVE Timers</h2>
+        <h2 className="text-2xl font-bold mb-4">Timerboard</h2>
         <p className="text-gray-400 mb-8">
           Sign in with your EVE Online character to access timer boards and manage structure timers.
         </p>
-        <div className="bg-gray-800 rounded-lg p-8 max-w-2xl mx-auto">
-          <h3 className="text-lg font-semibold mb-4">Features</h3>
-          <ul className="text-left space-y-2 text-gray-300">
-            <li>• Track EVE Online structure timers</li>
-            <li>• Support for all major structure types</li>
-            <li>• Multiple timerboards for different organizations</li>
-            <li>• Role-based access control</li>
-            <li>• Real-time countdown displays</li>
-            <li>• Audit logging and statistics</li>
-          </ul>
-        </div>
       </div>
     )
   }
