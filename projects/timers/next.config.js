@@ -8,7 +8,16 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-
+  // Enable webpack polling for file changes in Docker/WSL2
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        poll: 1000,
+        aggregateTimeout: 300,
+      }
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig

@@ -40,11 +40,10 @@ export async function GET(
       return NextResponse.json({ error: 'Timerboard not found' }, { status: 404 })
     }
 
-    // Get upcoming timers
+    // Get all timers (including expired ones for past timers view)
     const timers = await prisma.timer.findMany({
       where: {
         timerboardId,
-        isExpired: false,
       },
       include: {
         addedByUser: {
@@ -77,6 +76,7 @@ export async function GET(
         activeUntil: timer.activeUntil?.toISOString(),
         notes: timer.notes,
         isActive: timer.isActive,
+        isExpired: timer.isExpired,
         addedBy: timer.addedByUser.characterName,
         createdAt: timer.createdAt.toISOString(),
       })),

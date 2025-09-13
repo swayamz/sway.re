@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canAddTimer } from '@/lib/auth-utils'
+import { canRepairTimer } from '@/lib/auth-utils'
 
 export async function POST(
   request: NextRequest,
@@ -28,11 +28,11 @@ export async function POST(
       return NextResponse.json({ error: 'Timer not found' }, { status: 404 })
     }
 
-    // Check if user has permission to modify timers on this timerboard
-    const hasPermission = await canAddTimer(userId, timer.timerboardId)
+    // Check if user has permission to repair timers on this timerboard (moderator or admin only)
+    const hasPermission = await canRepairTimer(userId, timer.timerboardId)
     if (!hasPermission) {
       return NextResponse.json({ 
-        error: 'You do not have permission to repair timers on this timerboard' 
+        error: 'You do not have permission to repair timers on this timerboard. Only moderators and admins can repair timers.' 
       }, { status: 403 })
     }
 

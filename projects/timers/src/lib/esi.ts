@@ -52,11 +52,7 @@ const CAMPAIGNS_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
 const ESI_HEADERS = {
   'Accept': 'application/json',
-  'Content-Type': 'application/json',
-  'X-Compatibility-Date': '2025-08-26',
-  'Accept-Language': '',
-  'If-None-Match': '',
-  'X-Tenant': '',
+  'User-Agent': 'Sway-Timers-App/1.0)',
 }
 
 export async function getSystemRegion(systemName: string): Promise<string | null> {

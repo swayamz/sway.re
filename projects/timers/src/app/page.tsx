@@ -265,6 +265,18 @@ function formatStructureType(structureType: string): string {
     .replace(/\b\w/g, l => l.toUpperCase())
 }
 
+function isTimerRepaired(timer: Timer): boolean {
+  // A timer was repaired if it's expired and has an activeUntil time that's very close to the expired time
+  if (!timer.isExpired || !timer.activeUntil) return false
+  
+  const expiredTime = new Date(timer.expiresAt).getTime()
+  const activeUntilTime = new Date(timer.activeUntil).getTime()
+  
+  // If activeUntil is very close to or before expiresAt, it was likely repaired
+  // (normal timers have activeUntil significantly after expiresAt)
+  return activeUntilTime <= expiredTime + (5 * 60 * 1000) // Within 5 minutes
+}
+
 export default function HomePage() {
   const { data: session, status } = useSession()
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -836,7 +848,8 @@ export default function HomePage() {
                   
                   const isCampaignActive = (): boolean => {
                     const startTime = new Date(campaign.start_time)
-                    return startTime.getTime() <= currentTime.getTime()
+                    // Only show as active if campaign has started AND we're in upcoming events (not past events)
+                    return startTime.getTime() <= currentTime.getTime() && !showPastTimers
                   }
                   
                   const getScoreDisplay = (): JSX.Element | null => {
@@ -945,6 +958,11 @@ export default function HomePage() {
                                   {timer.layer}
                                 </span>
                               )}
+                              {showPastTimers && isTimerRepaired(timer) && (
+                                <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium">
+                                  REPAIRED
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center space-x-4 text-xs text-gray-400">
@@ -964,9 +982,10 @@ export default function HomePage() {
                             {showPastTimers ? 'ago' : 'from now'}
                           </div>
                           <div className="flex space-x-2">
-                            {/* Manual Repair Button - only show for Jump Bridges and Mercenary Dens during active window */}
+                            {/* Manual Repair Button - only show for Jump Bridges and Mercenary Dens during active window and for moderators/admins */}
                             {!showPastTimers && formatTimeUntil(timer, showPastTimers) === 'Active Now' && 
-                              (timer.structureType === 'JUMP_BRIDGE' || timer.structureType === 'MERCENARY_DEN') && (
+                              (timer.structureType === 'JUMP_BRIDGE' || timer.structureType === 'MERCENARY_DEN') &&
+                              selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') && (
                               <button
                                 onClick={() => handleManualRepair(timer.id)}
                                 disabled={repairTimer.isPending}

@@ -6,20 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Dockerized multi-project hosting platform designed for deployment to DigitalOcean. The system hosts multiple web applications under subdomains of sway.re (e.g., timers.sway.re, app2.sway.re).
 
-## Architecture
-
-**Core Components:**
-- **Nginx Reverse Proxy**: Routes traffic based on subdomains using container name routing
-- **Docker Compose**: Orchestrates all services with a shared `sway-network`
-- **Individual Projects**: Each project has its own container in `projects/` directory
-- **PostgreSQL Database**: Persistent database with separate instances for local/production
-- **SSL Integration**: Designed for Let's Encrypt certificates with both HTTP and HTTPS configurations
-
-**Key Design Patterns:**
-- Each project is a separate Docker service exposed internally on port 3000
-- Nginx proxies to containers by name (e.g., `sway-timers:3000`)
-- Domain routing handled in `nginx/sites/default.conf` with separate server blocks per subdomain
-- Environment variable configuration through `.env` file
+**Current Projects:**
+- **Timers**: EVE Online timer tracking application (Next.js + Prisma + PostgreSQL)
+  - Features: Timer management, timerboards, sovereignty tracking, user authentication via EVE SSO
+  - Location: `projects/timers/`
+  - Tech Stack: Next.js 14, Prisma, PostgreSQL, NextAuth, TailwindCSS
 
 ## Common Development Commands
 
@@ -28,41 +19,11 @@ This is a Dockerized multi-project hosting platform designed for deployment to D
 # Quick start - sets up hosts and starts dev environment
 ./scripts/dev.sh
 
-# Manual start with hot reload
-docker-compose -f docker-compose.local.yml up --build
-
 # View logs
 docker-compose logs -f [service_name]
 
-# Direct access to timers for debugging
-http://localhost:3001
-```
-
-**Production Deployment:**
-```bash
-# Deploy to DigitalOcean droplet
-./deploy.sh [environment] [domain]
-# Example: ./deploy.sh production mysite.com
-
-# SSL setup with Let's Encrypt
-./scripts/ssl-setup.sh your-domain.com
-
-# Manual SSL (alternative)
-sudo certbot certonly --standalone -d sway.re -d timers.sway.re
-```
-
-**Project-Specific Commands:**
-
-*Timers project:*
-```bash
-# Development
-cd projects/timers && npm run dev
-
-# Database commands
-npm run db:generate  # Generate Prisma client
-npm run db:migrate   # Run migrations
-npm run db:seed      # Seed database
-npm run db:studio    # Open Prisma Studio
+# Direct access URLs
+http://timers.localhost  # Timers app via nginx proxy
 ```
 
 ## Adding New Projects
@@ -85,54 +46,99 @@ npm run db:studio    # Open Prisma Studio
 
 ## File Structure Significance
 
-- `nginx/nginx.conf`: Main nginx configuration with rate limiting and gzip
-- `nginx/sites/default.conf`: Subdomain routing configuration (HTTP/HTTPS server blocks)
-- `nginx/ssl/`: SSL certificate storage directory
-- `projects/*/`: Individual application directories with their own Dockerfiles
-- `deploy.sh`: Production deployment automation script
+**Root Level:**
+- `docker-compose.yml`: Production services configuration
+- `docker-compose.local.yml`: Local development services configuration
+- `deploy.sh`: Production deployment automation script with interactive setup
 - `.env.example`: Template for environment configuration
+- `update.sh`: Project update script
+- `DEPLOYMENT.md`: Detailed deployment documentation
 
-## SSL/HTTPS Configuration
+**Nginx Configuration:**
+- `nginx/nginx.conf`: Main nginx configuration with rate limiting, gzip, security headers
+- `nginx/sites/default.conf`: Production subdomain routing (HTTP/HTTPS server blocks)
+- `nginx/sites/local.conf`: Local development routing (localhost domains)
+- `nginx/ssl/`: SSL certificate storage directory
 
-The system has commented-out HTTPS server blocks in nginx configuration. To enable SSL:
-1. Obtain certificates and place in `nginx/ssl/`
-2. Uncomment HTTPS server blocks in `nginx/sites/default.conf`
-3. Set `SSL_ENABLED=true` in `.env`
-4. Restart nginx container
+**Scripts:**
+- `scripts/dev.sh`: Local development setup (hosts file, container startup)
+- `scripts/ssl-setup.sh`: SSL certificate automation
+
+**Projects:**
+- `projects/timers/`: EVE Online timers application
+  - `Dockerfile`: Production container build
+  - `Dockerfile.dev`: Development container with hot reload
+  - `prisma/`: Database schema and migrations
+  - `src/`: Next.js application source code
+
+**Database Initialization:**
+- `postgres-init/`: PostgreSQL initialization scripts
 
 ## Environment Variables
 
-Key variables in `.env`:
+**Core Configuration:**
 - `DOMAIN`: Main domain (sway.re)
-- `SSL_ENABLED`: Controls HTTPS configuration
+- `SUBDOMAIN_TIMERS`: Timers subdomain (timers.sway.re)
+- `SSL_ENABLED`: Controls HTTPS configuration (true/false)
 - `LETSENCRYPT_EMAIL`: For SSL certificate registration
 - `POSTGRES_PASSWORD`: PostgreSQL database password
 
-## Database Setup
+**Authentication (Timers App):**
+- `NEXTAUTH_SECRET`: NextAuth.js secret key for session encryption
+- `NEXTAUTH_URL`: External URL for NextAuth callbacks
+- `EVE_CLIENT_ID`: EVE Online SSO application ID
+- `EVE_CLIENT_SECRET`: EVE Online SSO application secret
 
-**PostgreSQL Configuration:**
-- Production: Uses `postgres_data` volume for persistence
-- Local dev: Uses `postgres_local_data` volume, exposed on port 5432
-- Separate databases: `sway_timers` (prod), `sway_timers_dev` (local)
-- Connection via environment variables in docker-compose files
+**Optional Deployment:**
+- `DO_TOKEN`: DigitalOcean API token for automated deployment
+- `DO_DROPLET_NAME`: Target droplet name for deployment
 
-**Database Commands:**
-```bash
-# Start database only for local development
-docker-compose -f docker-compose.local.yml up postgres-local -d
+**Development Defaults:**
+- Local development uses `postgres-local` service
+- Default password fallback: `swaypassword`
+- Development database: `sway_timers_dev`
+- Production database: `sway_timers`
 
-# Run migrations (from timers directory)
-npm run db:migrate
+## Testing Changes
 
-# Reset database (careful - destroys data!)
-npx prisma migrate reset
-```
+**IMPORTANT: After making code changes, Claude MUST test the changes using the following workflow:**
 
-## Testing and Verification
+1. **Start Development Environment:**
+   ```bash
+   # If containers are not running, start them. Make sure to check first
+   # to avoid any unnecessary dev.sh running.
+   # If you need to run dev.sh, use a 5 minute timeout.
+   ./scripts/dev.sh
+   
+   # Verify containers are running
+   docker-compose -f docker-compose.local.yml ps
+   ```
 
-No formal testing framework is configured. Verify functionality by:
-- Checking container health: `docker-compose ps`
-- Testing endpoints: curl or browser access
-- Reviewing logs: `docker-compose logs [service]`
-- Database connection: `npm run db:studio`
-- Nginx configuration validation: `docker-compose exec nginx nginx -t`
+2. **Navigate to Application Using Playwright MCP:**
+   - Use Playwright MCP tools to navigate to the changed application
+   - Current available sites:
+     - `http://timers.localhost` - EVE Online timers application
+
+3. **Authenticate and Test Features:**
+   - **Sign into the application** using EVE SSO authentication via Playwright
+   - **Test all new features thoroughly** by interacting with the UI
+   - **Verify existing functionality** is not broken
+   - **Test edge cases and error scenarios**
+
+4. **Testing Requirements:**
+   - Navigate through all affected UI components
+   - Test form submissions, data updates, and user interactions
+   - Verify responsive behavior on different screen sizes
+   - Check console for JavaScript errors
+   - Validate API responses and data persistence
+
+**Test Checklist:**
+- [ ] Development environment started with `./scripts/dev.sh`
+- [ ] Successfully navigated to application URL
+- [ ] Authenticated with EVE SSO
+- [ ] All new features tested and working
+- [ ] Existing functionality verified as unbroken
+- [ ] No console errors or broken UI elements
+- [ ] Edge cases and error scenarios tested
+
+**Note:** Testing with Playwright MCP is mandatory for any UI changes, new features, or bug fixes. Do not consider the task complete until full testing has been performed.

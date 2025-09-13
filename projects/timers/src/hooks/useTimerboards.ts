@@ -12,6 +12,7 @@ export interface Timer {
   activeUntil: string | null
   notes: string | null
   isActive: boolean
+  isExpired: boolean
   addedBy: string
   createdAt: string
 }

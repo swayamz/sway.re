@@ -8,24 +8,32 @@ set -e
 echo "🔧 Setting up local development environment..."
 
 # Check if running on Linux/Mac (Windows users need manual hosts setup)
-if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "🌐 Adding local domains to /etc/hosts..."
-    
-    # Remove existing entries
-    sudo sed -i '/# Sway local development/d' /etc/hosts
-    sudo sed -i '/timers.localhost/d' /etc/hosts
-    
-    # Add new entries
-    echo "# Sway local development" | sudo tee -a /etc/hosts
-    echo "127.0.0.1 timers.localhost" | sudo tee -a /etc/hosts
-    
-    echo "✅ Added timers.localhost to /etc/hosts"
-fi
+#if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
+#    echo "🌐 Adding local domains to /etc/hosts..."
+#    
+#    # Remove existing entries
+#    sudo sed -i '/# Sway local development/d' /etc/hosts
+#    sudo sed -i '/timers.localhost/d' /etc/hosts
+#    
+#    # Add new entries
+#    echo "# Sway local development" | sudo tee -a /etc/hosts
+#    echo "127.0.0.1 timers.localhost" | sudo tee -a /etc/hosts
+#    
+#    echo "✅ Added timers.localhost to /etc/hosts"
+#fi
 
 # Start development containers
 echo "🚀 Starting development containers..."
 docker-compose -f docker-compose.local.yml down 2>/dev/null || true
-docker-compose -f docker-compose.local.yml up --build
+docker-compose -f docker-compose.local.yml up --build -d
+
+# Wait for containers to be ready
+echo "⏳ Waiting for containers to start..."
+sleep 5
+
+# Generate Prisma client
+echo "🔧 Generating Prisma client..."
+docker exec sway-timers-local npm run db:generate
 
 echo "🎉 Development environment ready!"
 echo ""
