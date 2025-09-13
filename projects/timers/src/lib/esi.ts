@@ -147,11 +147,12 @@ export async function getSovereigntyCampaigns(): Promise<SovereigntyCampaign[]> 
       }
     }
 
-    const response = await fetch('https://esi.evetech.net/latest/sovereignty/campaigns/?datasource=tranquility', {
+    const response = await fetch(`https://esi.evetech.net/latest/sovereignty/campaigns/?datasource=tranquility&_t=${Date.now()}`, {
       headers: {
         ...ESI_HEADERS,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
     });
 
