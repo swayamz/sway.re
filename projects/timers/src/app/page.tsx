@@ -445,18 +445,27 @@ export default function HomePage() {
   const upcomingEvents = allEvents
     .filter(event => {
       if (event.isCampaign) {
-        return new Date(event.expiresAt) > currentTime
+        const startTime = new Date(event.expiresAt)
+        return startTime > currentTime ||
+               (startTime <= currentTime &&
+                event.campaign.attackers_score !== undefined &&
+                event.campaign.defender_score !== undefined)
       }
       const expiredTime = new Date(event.expiresAt)
       const activeUntil = event.activeUntil ? new Date(event.activeUntil) : expiredTime
       return activeUntil > currentTime
     })
     .sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime())
-    
+
   const pastEvents = allEvents
     .filter(event => {
       if (event.isCampaign) {
-        return new Date(event.expiresAt) <= currentTime
+        const startTime = new Date(event.expiresAt)
+        // Campaign is "past" if:
+        // 1. It has started AND has no active scores (finished or inactive)
+        return startTime <= currentTime &&
+               (event.campaign.attackers_score === undefined ||
+                event.campaign.defender_score === undefined)
       }
       const expiredTime = new Date(event.expiresAt)
       const activeUntil = event.activeUntil ? new Date(event.activeUntil) : expiredTime
@@ -802,7 +811,7 @@ export default function HomePage() {
                 {campaignsLoading && (
                   <div className="flex items-center space-x-2 text-purple-400">
                     <LoadingSpinner size="small" />
-                    <span className="text-xs">Loading campaigns...</span>
+                    <span className="text-xs">Updating campaigns...</span>
                   </div>
                 )}
                 <RefreshingIndicator isRefreshing={timerboardQuery.isFetching} />
@@ -856,23 +865,33 @@ export default function HomePage() {
                     if (!isCampaignActive() || campaign.attackers_score === undefined || campaign.defender_score === undefined) {
                       return null
                     }
-                    
-                    const attackerPercentage = (campaign.attackers_score * 100).toFixed(1)
-                    const defenderPercentage = (campaign.defender_score * 100).toFixed(1)
+
+                    const attackerPercentage = Math.round(campaign.attackers_score * 100)
+                    const defenderPercentage = Math.round(campaign.defender_score * 100)
                     const attackerWinning = campaign.attackers_score > campaign.defender_score
                     const defenderWinning = campaign.defender_score > campaign.attackers_score
-                    
+
                     return (
-                      <div className="flex items-center space-x-3 text-sm mt-2">
-                        <div className={`px-2 py-1 rounded ${
-                          attackerWinning ? 'bg-red-900 text-red-200' : 'bg-gray-800 text-gray-300'
-                        }`}>
-                          Attackers: {attackerPercentage}%
+                      <div className="space-y-2 mt-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={`font-medium ${attackerWinning ? 'text-red-400' : 'text-red-300'}`}>
+                            Attackers: {attackerPercentage}%
+                          </span>
+                          <span className={`font-medium ${defenderWinning ? 'text-green-400' : 'text-green-300'}`}>
+                            Defenders: {defenderPercentage}%
+                          </span>
                         </div>
-                        <div className={`px-2 py-1 rounded ${
-                          defenderWinning ? 'bg-green-900 text-green-200' : 'bg-gray-800 text-gray-300'
-                        }`}>
-                          Defenders: {defenderPercentage}%
+                        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                          <div className="h-full flex">
+                            <div
+                              className="bg-red-500 transition-all duration-500"
+                              style={{ width: `${attackerPercentage}%` }}
+                            />
+                            <div
+                              className="bg-green-500 transition-all duration-500"
+                              style={{ width: `${defenderPercentage}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )

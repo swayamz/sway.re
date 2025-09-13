@@ -46,9 +46,9 @@ const systemCache = new Map<string, { region: string; systemId: number }>();
 const regionSystemsCache = new Map<string, number[]>();
 const constellationRegionCache = new Map<number, string>();
 
-// Cache for sovereignty campaigns with 2-minute TTL
+// Cache for sovereignty campaigns with 30-second TTL for frequent updates
 const campaignsCache = new Map<string, { data: SovereigntyCampaign[]; timestamp: number }>();
-const CAMPAIGNS_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const CAMPAIGNS_CACHE_TTL = 30 * 1000; // 30 seconds for real-time updates
 
 const ESI_HEADERS = {
   'Accept': 'application/json',
@@ -138,7 +138,7 @@ export async function getSovereigntyCampaigns(): Promise<SovereigntyCampaign[]> 
   try {
     const cacheKey = 'sovereignty_campaigns';
     const now = Date.now();
-    
+
     // Check cache first
     if (campaignsCache.has(cacheKey)) {
       const cached = campaignsCache.get(cacheKey)!;
@@ -148,7 +148,11 @@ export async function getSovereigntyCampaigns(): Promise<SovereigntyCampaign[]> 
     }
 
     const response = await fetch('https://esi.evetech.net/latest/sovereignty/campaigns/?datasource=tranquility', {
-      headers: ESI_HEADERS,
+      headers: {
+        ...ESI_HEADERS,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
     });
 
     if (!response.ok) {
@@ -157,10 +161,10 @@ export async function getSovereigntyCampaigns(): Promise<SovereigntyCampaign[]> 
     }
 
     const campaigns: SovereigntyCampaign[] = await response.json();
-    
+
     // Cache the result
     campaignsCache.set(cacheKey, { data: campaigns, timestamp: now });
-    
+
     return campaigns;
   } catch (error) {
     console.error('Error fetching sovereignty campaigns from ESI:', error);

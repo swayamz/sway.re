@@ -142,7 +142,7 @@ export function useCampaigns(timerboardId: string | null) {
       )
     },
     enabled: !!(regionsQuery.data && regionsQuery.data.length > 0),
-    refetchInterval: 2 * 60 * 1000, // Refresh campaigns every 2 minutes
+    refetchInterval: 30 * 1000, // Refresh campaigns every 30 seconds for real-time updates
   })
 
   return {
