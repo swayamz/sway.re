@@ -13,6 +13,8 @@ export interface Timer {
   notes: string | null
   isActive: boolean
   isExpired: boolean
+  isDestroyed: boolean
+  zkillboardId: string | null
   addedBy: string
   createdAt: string
 }
@@ -216,6 +218,27 @@ export function useTimerboardMutations() {
     },
   })
 
+  const destroyTimer = useMutation({
+    mutationFn: async ({ timerId, zkillboardLink }: { timerId: string; zkillboardLink: string }) => {
+      const response = await fetch(`/api/timers/${timerId}/destroy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ zkillboardLink }),
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to destroy timer')
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timerboard'] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
+    },
+  })
+
   const createTimerboard = useMutation({
     mutationFn: async ({ name, description }: { name: string; description?: string }) => {
       const response = await fetch('/api/timerboards', {
@@ -404,6 +427,7 @@ export function useTimerboardMutations() {
   return {
     deleteTimer,
     repairTimer,
+    destroyTimer,
     createTimerboard,
     deleteTimerboard,
     addUser,

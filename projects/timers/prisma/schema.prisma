@@ -80,6 +80,8 @@ model Timer {
   notes        String?
   isActive     Boolean     @default(false)
   isExpired    Boolean     @default(false)
+  isDestroyed  Boolean     @default(false)
+  zkillboardId String?     // zkillboard kill ID for destroyed timers
   addedBy      String
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt

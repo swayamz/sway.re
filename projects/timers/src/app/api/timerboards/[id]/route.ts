@@ -77,6 +77,8 @@ export async function GET(
         notes: timer.notes,
         isActive: timer.isActive,
         isExpired: timer.isExpired,
+        isDestroyed: timer.isDestroyed,
+        zkillboardId: timer.zkillboardId,
         addedBy: timer.addedByUser.characterName,
         createdAt: timer.createdAt.toISOString(),
       })),

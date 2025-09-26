@@ -265,16 +265,8 @@ function formatStructureType(structureType: string): string {
     .replace(/\b\w/g, l => l.toUpperCase())
 }
 
-function isTimerRepaired(timer: Timer): boolean {
-  // A timer was repaired if it's expired and has an activeUntil time that's very close to the expired time
-  if (!timer.isExpired || !timer.activeUntil) return false
-  
-  const expiredTime = new Date(timer.expiresAt).getTime()
-  const activeUntilTime = new Date(timer.activeUntil).getTime()
-  
-  // If activeUntil is very close to or before expiresAt, it was likely repaired
-  // (normal timers have activeUntil significantly after expiresAt)
-  return activeUntilTime <= expiredTime + (5 * 60 * 1000) // Within 5 minutes
+function isTimerDestroyed(timer: Timer): boolean {
+  return timer.isDestroyed
 }
 
 export default function HomePage() {
@@ -287,6 +279,10 @@ export default function HomePage() {
   const [newUserName, setNewUserName] = useState('')
   const [newUserRole, setNewUserRole] = useState('USER')
   const [userManagementError, setUserManagementError] = useState('')
+  const [showDestroyModal, setShowDestroyModal] = useState(false)
+  const [selectedTimerForDestroy, setSelectedTimerForDestroy] = useState<string | null>(null)
+  const [zkillboardLink, setZkillboardLink] = useState('')
+  const [destroyError, setDestroyError] = useState('')
   
   // React Query hooks
   const timerboardsQuery = useTimerboards()
@@ -297,7 +293,7 @@ export default function HomePage() {
   const { regions, campaigns, campaignsLoading } = useCampaigns(selectedTimerboardId)
   
   // Mutations
-  const { deleteTimer, repairTimer, addUser, removeUser } = useTimerboardMutations()
+  const { deleteTimer, repairTimer, destroyTimer, addUser, removeUser } = useTimerboardMutations()
   
   // Toast notifications
   const toast = useToast()
@@ -349,6 +345,37 @@ export default function HomePage() {
     } catch (error) {
       toast.error('Failed to delete timer', error instanceof Error ? error.message : 'Unknown error')
       console.error('Error deleting timer:', error)
+    }
+  }
+
+  const handleDestroyTimerClick = (timerId: string) => {
+    setSelectedTimerForDestroy(timerId)
+    setShowDestroyModal(true)
+    setZkillboardLink('')
+    setDestroyError('')
+  }
+
+  const handleDestroyTimer = async () => {
+    if (!selectedTimerForDestroy || !zkillboardLink.trim()) {
+      setDestroyError('zkillboard link is required')
+      return
+    }
+
+    setDestroyError('')
+
+    try {
+      await destroyTimer.mutateAsync({
+        timerId: selectedTimerForDestroy,
+        zkillboardLink: zkillboardLink.trim()
+      })
+      toast.success('Timer marked as destroyed')
+      setShowDestroyModal(false)
+      setSelectedTimerForDestroy(null)
+      setZkillboardLink('')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to destroy timer'
+      setDestroyError(errorMessage)
+      toast.error('Failed to destroy timer', errorMessage)
     }
   }
 
@@ -755,6 +782,7 @@ export default function HomePage() {
                               {log.action === 'TIMER_ADDED' && 'added timer'}
                               {log.action === 'TIMER_DELETED' && 'deleted timer'}
                               {log.action === 'TIMER_REPAIRED' && 'repaired timer'}
+                              {log.action === 'TIMER_DESTROYED' && 'destroyed timer'}
                               {log.action === 'USER_ADDED' && 'added user'}
                               {log.action === 'USER_REMOVED' && 'removed user'}
                               {log.action === 'UPDATE_REGIONS' && 'updated regions'}
@@ -977,10 +1005,28 @@ export default function HomePage() {
                                   {timer.layer}
                                 </span>
                               )}
-                              {showPastTimers && isTimerRepaired(timer) && (
+                              {showPastTimers && !isTimerDestroyed(timer) && (
                                 <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium">
                                   REPAIRED
                                 </span>
+                              )}
+                              {showPastTimers && isTimerDestroyed(timer) && (
+                                <div className="flex items-center space-x-2">
+                                  <span className="bg-red-600 text-white px-2 py-0.5 rounded text-xs font-medium">
+                                    DESTROYED
+                                  </span>
+                                  {timer.zkillboardId && (
+                                    <a
+                                      href={`https://zkillboard.com/kill/${timer.zkillboardId}/`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="bg-gray-700 hover:bg-gray-600 text-blue-400 hover:text-blue-300 px-2 py-0.5 rounded text-xs font-medium transition-colors"
+                                      title="View kill on zkillboard"
+                                    >
+                                      zkillboard
+                                    </a>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1014,6 +1060,22 @@ export default function HomePage() {
                                   <LoadingSpinner size="small" />
                                 ) : (
                                   <span>Repaired</span>
+                                )}
+                              </button>
+                            )}
+                            {/* Destroyed Button - only show for active or past timers and for moderators/admins */}
+                            {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') &&
+                             !isTimerDestroyed(timer) && new Date(timer.expiresAt) <= currentTime && (
+                              <button
+                                onClick={() => handleDestroyTimerClick(timer.id)}
+                                disabled={destroyTimer.isPending}
+                                className="bg-red-700 hover:bg-red-800 disabled:bg-gray-600 text-white px-3 py-1 rounded text-xs font-medium flex items-center space-x-1"
+                                title="Mark timer as destroyed with zkillboard link"
+                              >
+                                {destroyTimer.isPending && destroyTimer.variables?.timerId === timer.id ? (
+                                  <LoadingSpinner size="small" />
+                                ) : (
+                                  <span>Destroyed</span>
                                 )}
                               </button>
                             )}
@@ -1056,7 +1118,76 @@ export default function HomePage() {
           }}
         />
       )}
-      
+
+      {/* Destroy Timer Modal */}
+      {showDestroyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-red-400">Mark Timer as Destroyed</h2>
+              <button
+                onClick={() => {
+                  setShowDestroyModal(false)
+                  setSelectedTimerForDestroy(null)
+                  setZkillboardLink('')
+                  setDestroyError('')
+                }}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {destroyError && (
+              <div className="bg-red-600 text-white p-3 rounded mb-4">
+                {destroyError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="text-sm text-gray-300">
+                <p className="mb-2">Enter the zkillboard link for the kill that destroyed this structure.</p>
+                <p className="text-gray-400 text-xs">Example: https://zkillboard.com/kill/130099527/</p>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-medium">zkillboard Link *</span>
+                <input
+                  type="url"
+                  value={zkillboardLink}
+                  onChange={(e) => setZkillboardLink(e.target.value)}
+                  placeholder="https://zkillboard.com/kill/..."
+                  className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                  disabled={destroyTimer.isPending}
+                />
+              </label>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={handleDestroyTimer}
+                  disabled={destroyTimer.isPending || !zkillboardLink.trim()}
+                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white py-2 px-4 rounded font-medium"
+                >
+                  {destroyTimer.isPending ? 'Marking as Destroyed...' : 'Mark as Destroyed'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDestroyModal(false)
+                    setSelectedTimerForDestroy(null)
+                    setZkillboardLink('')
+                    setDestroyError('')
+                  }}
+                  className="bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded"
+                  disabled={destroyTimer.isPending}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notifications */}
       <ToastContainer 
         toasts={toast.toasts} 
