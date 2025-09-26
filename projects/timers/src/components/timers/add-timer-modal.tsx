@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { parseOrbitalSkyhook, parseJumpBridge, parseMercenaryDen, parseOtherStructure } from '@/lib/timer-parsers'
+import { parseOrbitalSkyhook, parseJumpBridge, parseMercenaryDen, parseOtherStructure, parseAnchoringStructure, detectAnchoringStructure } from '@/lib/timer-parsers'
 
 interface AddTimerModalProps {
   isOpen: boolean
@@ -39,6 +39,18 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     setPlanet('')
   }
 
+  // Handle paste input changes and detect anchoring structures
+  const handlePasteInputChange = (value: string) => {
+    setPasteInput(value)
+
+    // Auto-detect anchoring structures and set layer accordingly
+    if (['FORTIZAR', 'AZBEL', 'SOTIYO', 'KEEPSTAR', 'TATARA', 'ASTRAHUS', 'ATHANOR', 'RAITARU'].includes(structureType)) {
+      if (detectAnchoringStructure(value)) {
+        setLayer('ANCHORING')
+      }
+    }
+  }
+
   const handleSubmit = async () => {
     setLoading(true)
     setError('')
@@ -46,43 +58,54 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     try {
       let parsedTimer = null
 
-      switch (structureType) {
-        case 'ORBITAL_SKYHOOK':
-          parsedTimer = parseOrbitalSkyhook(pasteInput)
-          break
-        case 'JUMP_BRIDGE':
-          if (!owner) {
-            setError('Owner is required for Jump Bridges')
-            setLoading(false)
-            return
-          }
-          parsedTimer = parseJumpBridge(pasteInput, owner)
-          break
-        case 'MERCENARY_DEN':
-          if (!owner || !system || !planet) {
-            setError('Owner, system, and planet are required for Mercenary Dens')
-            setLoading(false)
-            return
-          }
-          parsedTimer = parseMercenaryDen(pasteInput, system, planet, owner)
-          break
-        case 'METENOX':
-          if (!owner) {
-            setError('Owner is required for Metenox structures')
-            setLoading(false)
-            return
-          }
-          parsedTimer = parseOtherStructure(pasteInput, structureType, '', owner)
-          break
-        default:
-          // Other structures (Astrahus, Fortizar, etc.)
-          if (!owner || !layer) {
-            setError('Owner and layer are required for this structure type')
-            setLoading(false)
-            return
-          }
-          parsedTimer = parseOtherStructure(pasteInput, structureType, layer, owner)
-          break
+      // Check if this is an anchoring structure first
+      if (['FORTIZAR', 'AZBEL', 'SOTIYO', 'KEEPSTAR', 'TATARA', 'ASTRAHUS', 'ATHANOR', 'RAITARU'].includes(structureType) &&
+          layer === 'ANCHORING' && detectAnchoringStructure(pasteInput)) {
+        if (!owner) {
+          setError('Owner is required for anchoring structures')
+          setLoading(false)
+          return
+        }
+        parsedTimer = parseAnchoringStructure(pasteInput, structureType, owner)
+      } else {
+        switch (structureType) {
+          case 'ORBITAL_SKYHOOK':
+            parsedTimer = parseOrbitalSkyhook(pasteInput)
+            break
+          case 'JUMP_BRIDGE':
+            if (!owner) {
+              setError('Owner is required for Jump Bridges')
+              setLoading(false)
+              return
+            }
+            parsedTimer = parseJumpBridge(pasteInput, owner)
+            break
+          case 'MERCENARY_DEN':
+            if (!owner || !system || !planet) {
+              setError('Owner, system, and planet are required for Mercenary Dens')
+              setLoading(false)
+              return
+            }
+            parsedTimer = parseMercenaryDen(pasteInput, system, planet, owner)
+            break
+          case 'METENOX':
+            if (!owner) {
+              setError('Owner is required for Metenox structures')
+              setLoading(false)
+              return
+            }
+            parsedTimer = parseOtherStructure(pasteInput, structureType, '', owner)
+            break
+          default:
+            // Other structures (Astrahus, Fortizar, etc.)
+            if (!owner || !layer) {
+              setError('Owner and layer are required for this structure type')
+              setLoading(false)
+              return
+            }
+            parsedTimer = parseOtherStructure(pasteInput, structureType, layer, owner)
+            break
+        }
       }
 
       if (!parsedTimer || !parsedTimer.expiresAt) {
@@ -282,7 +305,7 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
                   <span className="text-sm font-medium">Paste from game:</span>
                   <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
                     placeholder="Orbital Skyhook (F2OY-X IV) [Brave Holdings]
 69 km
 Reinforced until 2025.05.04 20:23:01"
@@ -299,7 +322,7 @@ Reinforced until 2025.05.04 20:23:01"
                   <span className="text-sm font-medium">Paste from game:</span>
                   <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
                     placeholder="EFM-C4 » C-J6MT - Eye Of Terror Mk.VIII
 1,595 m
 Reinforced until 2025.08.26 19:16:49"
@@ -394,8 +417,14 @@ Reinforced until 2025.08.26 19:16:49"
                   <span className="text-sm font-medium">Paste from game:</span>
                   <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
-                    placeholder="Y-MPWL - Road of Military Parade S
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
+                    placeholder="E8-432 - P A N F A M S T A R
+2,398 km
+Anchoring until 2025.09.22 16:49:02
+
+OR
+
+E8-432 - P A N F A M S T A R
 3,714 km
 Reinforced until 2025.08.24 19:25:45"
                     rows={4}
@@ -433,8 +462,14 @@ Reinforced until 2025.08.24 19:25:45"
                   <span className="text-sm font-medium">Paste from game:</span>
                   <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
-                    placeholder="Y-MPWL - Road of Military Parade S
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
+                    placeholder="E8-432 - P A N F A M S T A R
+2,398 km
+Anchoring until 2025.09.22 16:49:02
+
+OR
+
+E8-432 - P A N F A M S T A R
 3,714 km
 Reinforced until 2025.08.24 19:25:45"
                     rows={4}
@@ -460,7 +495,7 @@ Reinforced until 2025.08.24 19:25:45"
                   <span className="text-sm font-medium">Paste from game:</span>
                   <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
                     placeholder="L-FVHR - Military Parade S
 3,714 km
 Reinforced until 2025.08.24 19:25:45"

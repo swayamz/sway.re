@@ -1,5 +1,9 @@
 // Timer parsing utilities for different structure types
 
+export function detectAnchoringStructure(input: string): boolean {
+  return input.toLowerCase().includes('anchoring until')
+}
+
 export interface ParsedTimer {
   structureType: string
   system: string
@@ -166,10 +170,68 @@ export function parseMercenaryDen(dateInput: string, system: string, planet: str
   }
 }
 
+export function parseAnchoringStructure(input: string, structureType: string, owner: string): ParsedTimer | null {
+  try {
+    // Expected format:
+    // "B-WQDP - Nervous Energy
+    // 2,398 km
+    // Anchoring until 2025.09.22 16:49:02"
+
+    const lines = input.trim().split('\n').map((line: string) => line.trim()).filter((line: string) => line)
+
+    if (lines.length < 3) {
+      throw new Error('Invalid format: Expected at least 3 lines')
+    }
+
+    // Parse first line: "B-WQDP - Nervous Energy"
+    const firstLine = lines[0]
+    const structureMatch = firstLine.match(/^([A-Za-z0-9\-]+)\s+-\s+(.+)$/)
+
+    if (!structureMatch) {
+      throw new Error('Invalid structure format')
+    }
+
+    const [, system, structureName] = structureMatch
+
+    // Parse anchoring until line
+    let expiresAt: Date | undefined
+    for (const line of lines) {
+      if (line.startsWith('Anchoring until')) {
+        const dateMatch = line.match(/Anchoring until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
+        if (dateMatch) {
+          const dateStr = dateMatch[1].replace(/\./g, '-')
+          expiresAt = new Date(dateStr + ' UTC')
+          break
+        }
+      }
+    }
+
+    if (!expiresAt) {
+      throw new Error('Could not parse anchoring until date')
+    }
+
+    // Anchoring structures have a 15-minute active window after the timer expires
+    const activeUntil = new Date(expiresAt.getTime() + (15 * 60 * 1000))
+
+    return {
+      structureType,
+      system,
+      location: structureName,
+      owner,
+      expiresAt,
+      activeUntil,
+      layer: 'ANCHORING',
+    }
+  } catch (error) {
+    console.error('Error parsing anchoring structure:', error)
+    return null
+  }
+}
+
 export function parseOtherStructure(
-  input: string, 
-  structureType: string, 
-  layer: string, 
+  input: string,
+  structureType: string,
+  layer: string,
   owner: string
 ): ParsedTimer | null {
   try {
@@ -184,9 +246,9 @@ export function parseOtherStructure(
       throw new Error('Invalid format: Expected at least 3 lines')
     }
 
-    // Parse first line: "Y-MPWL - Road of Military Parade S"
+    // Parse first line: "Y-MPWL - Road of Military Parade S" or "Ruvas - GH's MTU Reprocessing Facility"
     const firstLine = lines[0]
-    const structureMatch = firstLine.match(/^([A-Z0-9\-]+)\s+-\s+(.+)$/)
+    const structureMatch = firstLine.match(/^([A-Za-z0-9\-]+)\s+-\s+(.+)$/)
     
     if (!structureMatch) {
       throw new Error('Invalid structure format')
