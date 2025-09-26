@@ -23,6 +23,11 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState(1)
+  const [duplicateError, setDuplicateError] = useState<{
+    message: string
+    existingTimer: { id: string, expiresAt: string, createdAt: string }
+  } | null>(null)
+  const [pendingTimerData, setPendingTimerData] = useState<any>(null)
   
   const queryClient = useQueryClient()
 
@@ -51,9 +56,10 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (force = false) => {
     setLoading(true)
     setError('')
+    setDuplicateError(null)
 
     try {
       let parsedTimer = null
@@ -114,26 +120,42 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
         return
       }
 
+      // Prepare timer data
+      const timerData = {
+        timerboardId,
+        structureType: parsedTimer.structureType,
+        system: parsedTimer.system,
+        location: parsedTimer.location,
+        owner: parsedTimer.owner,
+        layer: parsedTimer.layer,
+        expiresAt: parsedTimer.expiresAt.toISOString(),
+        notes: notes.trim() || null,
+      }
+
       // Submit to API
-      const response = await fetch('/api/timers', {
+      const url = force ? '/api/timers?force=true' : '/api/timers'
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          timerboardId,
-          structureType: parsedTimer.structureType,
-          system: parsedTimer.system,
-          location: parsedTimer.location,
-          owner: parsedTimer.owner,
-          layer: parsedTimer.layer,
-          expiresAt: parsedTimer.expiresAt.toISOString(),
-          notes: notes.trim() || null,
-        }),
+        body: JSON.stringify(timerData),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
+
+        if (errorData.error === 'DUPLICATE_TIMER') {
+          // Handle duplicate timer error
+          setDuplicateError({
+            message: errorData.message,
+            existingTimer: errorData.existingTimer
+          })
+          setPendingTimerData(timerData)
+          setLoading(false)
+          return
+        }
+
         throw new Error(errorData.error || 'Failed to create timer')
       }
 
@@ -159,6 +181,15 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     }
   }
 
+  const handleForceAdd = async () => {
+    await handleSubmit(true)
+  }
+
+  const handleCancelDuplicate = () => {
+    setDuplicateError(null)
+    setPendingTimerData(null)
+  }
+
   const handleClose = () => {
     setStep(1)
     setStructureType('')
@@ -170,6 +201,8 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     setNotes('')
     setError('')
     setLoading(false)
+    setDuplicateError(null)
+    setPendingTimerData(null)
     onClose()
   }
 
@@ -192,7 +225,38 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
           </div>
         )}
 
-        {step === 1 && (
+        {duplicateError && (
+          <div className="bg-yellow-600 text-white p-4 rounded mb-4">
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 text-2xl">⚠️</div>
+              <div className="flex-1">
+                <h4 className="font-semibold mb-2">Duplicate Timer Detected</h4>
+                <p className="text-sm mb-3">{duplicateError.message}</p>
+                <div className="text-xs text-yellow-100 mb-4">
+                  <p>Existing timer created: {new Date(duplicateError.existingTimer.createdAt).toLocaleString()}</p>
+                  <p>Expires at: {new Date(duplicateError.existingTimer.expiresAt).toLocaleString()}</p>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleForceAdd}
+                    disabled={loading}
+                    className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white py-2 px-4 rounded text-sm font-medium"
+                  >
+                    {loading ? 'Adding...' : 'Add Anyway'}
+                  </button>
+                  <button
+                    onClick={handleCancelDuplicate}
+                    className="bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded text-sm"
+                  >
+                    Cancel & Review Existing
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && !duplicateError && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Select Structure Type</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -284,7 +348,7 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
           </div>
         )}
 
-        {step === 2 && (
+        {step === 2 && !duplicateError && (
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
               <button 
@@ -520,7 +584,7 @@ Reinforced until 2025.08.24 19:25:45"
 
             <div className="flex space-x-3 pt-4">
               <button
-                onClick={handleSubmit}
+                onClick={() => handleSubmit(false)}
                 disabled={loading}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-2 px-4 rounded font-medium"
               >

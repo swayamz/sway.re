@@ -4,17 +4,20 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAddTimer } from '@/lib/auth-utils'
 import { getSystemRegion } from '@/lib/esi'
+import { checkForDuplicateTimer, formatDuplicateMessage } from '@/lib/timer-utils'
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const userId = (session.user as any).userId
     const body = await request.json()
+    const url = new URL(request.url)
+    const forceDuplicate = url.searchParams.get('force') === 'true'
     
     const { 
       timerboardId, 
@@ -45,9 +48,60 @@ export async function POST(request: NextRequest) {
     // Fetch region data from EVE Online ESI
     const region = await getSystemRegion(system)
 
+    // Check for duplicate timers (unless forcing)
+    const expiryDate = new Date(expiresAt)
+    if (!forceDuplicate) {
+      console.log('Checking for duplicate timer:', {
+        timerboardId,
+        structureType,
+        system,
+        location,
+        owner,
+        layer: layer || null,
+        expiresAt: expiryDate
+      })
+
+      try {
+        const duplicateTimer = await checkForDuplicateTimer({
+          timerboardId,
+          structureType,
+          system,
+          location,
+          owner,
+          layer: layer || null,
+          expiresAt: expiryDate
+        })
+
+        console.log('Duplicate check result:', duplicateTimer)
+
+        if (duplicateTimer) {
+          const timeDifference = expiryDate.getTime() - duplicateTimer.expiresAt.getTime()
+          const message = formatDuplicateMessage(duplicateTimer, timeDifference)
+
+          console.log('Duplicate timer found, returning error')
+          return NextResponse.json({
+            error: 'DUPLICATE_TIMER',
+            message,
+            existingTimer: {
+              id: duplicateTimer.id,
+              expiresAt: duplicateTimer.expiresAt.toISOString(),
+              createdAt: duplicateTimer.createdAt.toISOString()
+            }
+          }, { status: 409 })
+        }
+
+        console.log('No duplicate found, proceeding with timer creation')
+      } catch (error) {
+        console.error('Error during duplicate check:', error)
+        // If duplicate check fails, we should still prevent creation for safety
+        return NextResponse.json({
+          error: 'Unable to verify if timer is duplicate. Please try again.',
+        }, { status: 500 })
+      }
+    }
+
     // Calculate active window based on structure type
     let activeUntil = null
-    const expiryDate = new Date(expiresAt)
     
     switch (structureType) {
       case 'ORBITAL_SKYHOOK':
