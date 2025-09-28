@@ -1063,9 +1063,8 @@ export default function HomePage() {
                                 )}
                               </button>
                             )}
-                            {/* Destroyed Button - only show for active or past timers and for moderators/admins */}
-                            {selectedTimerboard && (selectedTimerboard.timerboard.userRole === 'ADMIN' || selectedTimerboard.timerboard.userRole === 'MODERATOR') &&
-                             !isTimerDestroyed(timer) && new Date(timer.expiresAt) <= currentTime && (
+                            {/* Destroyed Button - only show for active or past timers and for all users */}
+                            {selectedTimerboard && !isTimerDestroyed(timer) && new Date(timer.expiresAt) <= currentTime && (
                               <button
                                 onClick={() => handleDestroyTimerClick(timer.id)}
                                 disabled={destroyTimer.isPending}
