@@ -22,9 +22,8 @@ export default function HomePage() {
   if (!session) {
     return (
       <div className="text-center">
-        <h1 className="text-3xl font-bold mb-4">Welcome to Toast</h1>
         <p className="text-gray-400 mb-8">
-          Sign in with your EVE Online character to track entosis notifications.
+          Sign in with your EVE Online character.
         </p>
       </div>
     )
