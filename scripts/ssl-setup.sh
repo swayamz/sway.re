@@ -28,7 +28,8 @@ sudo certbot certonly --standalone \
     -d "toast.$DOMAIN" \
     --email "$EMAIL" \
     --agree-tos \
-    --non-interactive
+    --non-interactive \
+    --expand
 
 # Copy certificates to nginx directory
 echo "📁 Copying certificates..."
