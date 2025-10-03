@@ -25,6 +25,7 @@ echo "🔑 Obtaining SSL certificates..."
 sudo certbot certonly --standalone \
     -d "$DOMAIN" \
     -d "timers.$DOMAIN" \
+    -d "toast.$DOMAIN" \
     --email "$EMAIL" \
     --agree-tos \
     --non-interactive
@@ -52,6 +53,7 @@ if curl -f "https://$DOMAIN/health" >/dev/null 2>&1; then
     echo "🌐 Your sites are now available at:"
     echo "   - https://$DOMAIN"
     echo "   - https://timers.$DOMAIN"
+    echo "   - https://toast.$DOMAIN"
 else
     echo "⚠️ SSL test failed - checking logs..."
     docker-compose logs nginx --tail=20
