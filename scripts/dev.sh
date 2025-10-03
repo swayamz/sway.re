@@ -34,6 +34,7 @@ sleep 5
 # Generate Prisma client
 echo "🔧 Generating Prisma client..."
 docker exec sway-timers-local npm run db:generate
+docker exec sway-toast-local npm run db:generate
 
 echo "🎉 Development environment ready!"
 echo ""

@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for EVE Online characters (shared across apps)
+model User {
+  id            String   @id @default(cuid())
+  characterId   Int      @unique
+  characterName String
+  corporationId Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // User roles
+  isAdmin       Boolean  @default(false)
+
+  // Relations
+  entosisEvents EntosisEvent[]
+
+  @@map("users")
+}
+
+// Entosis event model for sovereignty notifications
+model EntosisEvent {
+  id               String   @id @default(cuid())
+  system           String   // EVE system name (e.g., "UJXC-B")
+  region           String?  // EVE region name from ESI
+  status           String   @default("Being Captured!") // "Being Captured!", "On the way", "Cleared", "Reset", "REINFORCED"
+  timestamp        DateTime // When the entosis event occurred in EVE
+  isReinforced     Boolean  @default(false)
+  notificationHash String   @unique // Hash for deduplication
+
+  // User tracking
+  importedBy       String   // User ID who imported this notification
+  importedAt       DateTime @default(now())
+
+  // Action tracking
+  markedBy         String?  // User ID who marked status change
+  markedAt         DateTime?
+  markedNote       String?  // Optional note when marking status
+  lastUpdatedBy    String?  // User ID who made the last update
+  lastUpdatedAt    DateTime? // When the last update was made
+
+  // Relations
+  importedByUser   User     @relation(fields: [importedBy], references: [id])
+
+  @@map("entosis_events")
+  @@index([timestamp])
+  @@index([system])
+  @@index([status])
+}

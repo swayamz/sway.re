@@ -105,8 +105,15 @@ echo ""
 echo "🚀 EVE Online SSO Configuration (REQUIRED):"
 echo "   Get these from: https://developers.eveonline.com/applications"
 echo "   Create a new application with callback URL: https://timers.$DOMAIN/api/auth/callback/eve-online"
-prompt_env_var "EVE_CLIENT_ID" "EVE Online Client ID" "" false
-prompt_env_var "EVE_CLIENT_SECRET" "EVE Online Client Secret" "" true
+prompt_env_var "EVE_CLIENT_ID" "EVE Online Client ID for Timers app" "" false
+prompt_env_var "EVE_CLIENT_SECRET" "EVE Online Client Secret for Timers app" "" true
+
+# EVE Online SSO configuration for Toast app
+echo ""
+echo "🍞 Toast App EVE Online SSO Configuration (REQUIRED):"
+echo "   Create a separate application with callback URL: https://toast.$DOMAIN/api/auth/callback/eve-online"
+prompt_env_var "EVE_CLIENT_ID_TOAST" "EVE Online Client ID for Toast app" "" false
+prompt_env_var "EVE_CLIENT_SECRET_TOAST" "EVE Online Client Secret for Toast app" "" true
 
 # Verify required variables are set
 echo ""
@@ -119,11 +126,17 @@ fi
 if grep -q "your-eve-client-secret" .env; then
     missing_vars="$missing_vars EVE_CLIENT_SECRET"
 fi
+if grep -q "your-eve-client-id" .env || [ -z "$(grep '^EVE_CLIENT_ID_TOAST=' .env 2>/dev/null)" ]; then
+    missing_vars="$missing_vars EVE_CLIENT_ID_TOAST"
+fi
+if grep -q "your-eve-client-secret" .env || [ -z "$(grep '^EVE_CLIENT_SECRET_TOAST=' .env 2>/dev/null)" ]; then
+    missing_vars="$missing_vars EVE_CLIENT_SECRET_TOAST"
+fi
 
 if [ -n "$missing_vars" ]; then
     echo ""
     echo "❌ Missing required environment variables:$missing_vars"
-    echo "   The application will not work without EVE Online SSO credentials."
+    echo "   Both applications will not work without EVE Online SSO credentials."
     echo "   You can add them later by editing the .env file and restarting with:"
     echo "   docker-compose restart"
     echo ""
@@ -186,20 +199,38 @@ done
 echo "✅ Database is ready"
 
 # Run database migrations for timers app
-echo "🗄️ Running database migrations..."
+echo "🗄️ Running database migrations for timers app..."
 if docker-compose exec -T timers npm run db:generate; then
-    echo "✅ Prisma client generated successfully"
+    echo "✅ Timers Prisma client generated successfully"
 else
-    echo "❌ Failed to generate Prisma client"
+    echo "❌ Failed to generate Timers Prisma client"
     docker-compose logs timers
     exit 1
 fi
 
 if docker-compose exec -T timers npm run db:migrate; then
-    echo "✅ Database migrations completed successfully"
+    echo "✅ Timers database migrations completed successfully"
 else
-    echo "❌ Database migrations failed"
+    echo "❌ Timers database migrations failed"
     docker-compose logs timers
+    exit 1
+fi
+
+# Run database migrations for toast app
+echo "🗄️ Running database migrations for toast app..."
+if docker-compose exec -T toast npm run db:generate; then
+    echo "✅ Toast Prisma client generated successfully"
+else
+    echo "❌ Failed to generate Toast Prisma client"
+    docker-compose logs toast
+    exit 1
+fi
+
+if docker-compose exec -T toast npm run db:migrate; then
+    echo "✅ Toast database migrations completed successfully"
+else
+    echo "❌ Toast database migrations failed"
+    docker-compose logs toast
     exit 1
 fi
 
@@ -223,6 +254,14 @@ else
     docker-compose logs --tail=20 timers
 fi
 
+# Test toast subdomain (if running locally with hosts file setup)
+if curl -f -H "Host: toast.$DOMAIN" http://localhost/api/health >/dev/null 2>&1; then
+    echo "✅ Toast health check passed"
+else
+    echo "⚠️ Toast health check failed - checking container logs"
+    docker-compose logs --tail=20 toast
+fi
+
 # Show container status
 echo "📊 Container status:"
 docker-compose ps
@@ -232,6 +271,7 @@ echo ""
 echo "🌐 Your applications should be accessible at:"
 echo "   - Main site: http://$DOMAIN"
 echo "   - Timers: http://timers.$DOMAIN"
+echo "   - Toast: http://toast.$DOMAIN"
 echo ""
 echo "💻 Server IP: $(curl -s ifconfig.me || echo 'Unable to detect')"
 echo ""

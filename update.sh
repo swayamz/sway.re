@@ -137,17 +137,34 @@ update_database() {
     # Run migrations if timers service is being updated
     if [ "$SERVICE_NAME" = "timers" ] || [ -z "$SERVICE_NAME" ]; then
         log_info "Running database migrations for timers..."
-        
+
         if docker-compose exec -T timers npm run db:generate >/dev/null 2>&1; then
-            log_success "Prisma client generated"
+            log_success "Timers Prisma client generated"
         else
-            log_warning "Failed to generate Prisma client"
+            log_warning "Failed to generate Timers Prisma client"
         fi
-        
+
         if docker-compose exec -T timers npm run db:migrate >/dev/null 2>&1; then
-            log_success "Database migrations completed"
+            log_success "Timers database migrations completed"
         else
-            log_warning "Database migrations failed or no new migrations"
+            log_warning "Timers database migrations failed or no new migrations"
+        fi
+    fi
+
+    # Run migrations if toast service is being updated
+    if [ "$SERVICE_NAME" = "toast" ] || [ -z "$SERVICE_NAME" ]; then
+        log_info "Running database migrations for toast..."
+
+        if docker-compose exec -T toast npm run db:generate >/dev/null 2>&1; then
+            log_success "Toast Prisma client generated"
+        else
+            log_warning "Failed to generate Toast Prisma client"
+        fi
+
+        if docker-compose exec -T toast npm run db:migrate >/dev/null 2>&1; then
+            log_success "Toast database migrations completed"
+        else
+            log_warning "Toast database migrations failed or no new migrations"
         fi
     fi
 }
@@ -166,6 +183,10 @@ if [ -n "$SERVICE_NAME" ]; then
     
     case $SERVICE_NAME in
         "timers")
+            rolling_update $SERVICE_NAME
+            update_database
+            ;;
+        "toast")
             rolling_update $SERVICE_NAME
             update_database
             ;;
@@ -192,7 +213,7 @@ else
     log_info "Updating all services..."
     
     # Update application services first
-    for service in timers; do
+    for service in timers toast; do
         if docker-compose ps --services | grep -q "^$service$"; then
             rolling_update $service
         fi
@@ -239,11 +260,20 @@ else
     log_warning "Timers health check failed"
 fi
 
+# Test toast endpoint
+if curl -f http://localhost:3002/api/health >/dev/null 2>&1; then
+    log_success "Toast health check passed"
+elif curl -f -H "Host: toast.sway.re" http://localhost/api/health >/dev/null 2>&1; then
+    log_success "Toast health check passed (via nginx proxy)"
+else
+    log_warning "Toast health check failed"
+fi
+
 echo ""
 log_success "Update completed successfully!"
 echo ""
 log_info "Usage tips:"
-echo "  - Update specific service: ./update.sh timers"
+echo "  - Update specific service: ./update.sh timers (or ./update.sh toast)"
 echo "  - Update all services: ./update.sh"
 echo "  - Check logs: docker-compose logs -f [service_name]"
 echo "  - Check status: docker-compose ps"

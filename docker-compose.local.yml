@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     depends_on:
       - timers
+      - toast
     networks:
       - sway-network
 
@@ -30,6 +31,32 @@ services:
       - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD:-swaypassword}@postgres-local:5432/sway_timers_dev?schema=public
       - EVE_CLIENT_ID=${EVE_CLIENT_ID}
       - EVE_CLIENT_SECRET=${EVE_CLIENT_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL_TIMERS:-http://timers.localhost}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+    depends_on:
+      - postgres-local
+    restart: unless-stopped
+    networks:
+      - sway-network
+    command: npm run dev
+
+  toast:
+    build:
+      context: ./projects/toast
+      dockerfile: Dockerfile.dev
+    container_name: sway-toast-local
+    ports:
+      - "3002:3000"  # Direct access for debugging
+    volumes:
+      - ./projects/toast:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://sway:${POSTGRES_PASSWORD:-swaypassword}@postgres-local:5432/sway_toast_dev?schema=public
+      - EVE_CLIENT_ID=${EVE_CLIENT_ID_TOAST}
+      - EVE_CLIENT_SECRET=${EVE_CLIENT_SECRET_TOAST}
+      - NEXTAUTH_URL=${NEXTAUTH_URL_TOAST:-http://toast.localhost}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
     depends_on:
       - postgres-local
     restart: unless-stopped
