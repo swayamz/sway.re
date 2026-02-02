@@ -42,13 +42,30 @@ interface UniverseNamesResponse {
   category: string
 }
 
+interface EsiCorporationData {
+  alliance_id?: number
+  ceo_id: number
+  creator_id: number
+  date_founded?: string
+  description?: string
+  home_station_id?: number
+  member_count: number
+  name: string
+  shares?: number
+  tax_rate: number
+  ticker: string
+  url?: string
+}
+
 const systemCache = new Map<string, { region: string; systemId: number }>();
 const regionSystemsCache = new Map<string, number[]>();
 const constellationRegionCache = new Map<number, string>();
+const corporationCache = new Map<number, { data: EsiCorporationData; timestamp: number }>();
 
 // Cache for sovereignty campaigns with 30-second TTL for frequent updates
 const campaignsCache = new Map<string, { data: SovereigntyCampaign[]; timestamp: number }>();
 const CAMPAIGNS_CACHE_TTL = 30 * 1000; // 30 seconds for real-time updates
+const CORPORATION_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours for corporation data
 
 const ESI_HEADERS = {
   'Accept': 'application/json',
@@ -235,6 +252,77 @@ export async function getConstellationRegion(constellationId: number): Promise<s
     return regionData.name;
   } catch (error) {
     console.error('Error fetching constellation region from ESI:', error);
+    return null;
+  }
+}
+
+export async function getCorporationInfo(corporationId: number): Promise<EsiCorporationData | null> {
+  try {
+    const now = Date.now();
+
+    // Check cache first
+    if (corporationCache.has(corporationId)) {
+      const cached = corporationCache.get(corporationId)!;
+      if (now - cached.timestamp < CORPORATION_CACHE_TTL) {
+        return cached.data;
+      }
+    }
+
+    const response = await fetch(
+      `https://esi.evetech.net/latest/corporations/${corporationId}/`,
+      { headers: ESI_HEADERS }
+    );
+
+    if (!response.ok) {
+      console.error(`ESI corporation fetch failed: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const corporationData: EsiCorporationData = await response.json();
+
+    // Cache result
+    corporationCache.set(corporationId, { data: corporationData, timestamp: now });
+
+    return corporationData;
+  } catch (error) {
+    console.error('Error fetching corporation info from ESI:', error);
+    return null;
+  }
+}
+
+export async function searchCorporation(corporationName: string): Promise<{ id: number; name: string } | null> {
+  try {
+    // Use universe/ids to search for corporation by name
+    const idsResponse = await fetch('https://esi.evetech.net/latest/universe/ids/', {
+      method: 'POST',
+      headers: ESI_HEADERS,
+      body: JSON.stringify([corporationName]),
+    });
+
+    if (!idsResponse.ok) {
+      console.error(`ESI /universe/ids failed: ${idsResponse.status} ${idsResponse.statusText}`);
+      return null;
+    }
+
+    const idsData = await idsResponse.json();
+    const corporationId = idsData.corporations?.[0]?.id;
+
+    if (!corporationId) {
+      return null;
+    }
+
+    // Get full corporation info to verify and get exact name
+    const corpInfo = await getCorporationInfo(corporationId);
+    if (!corpInfo) {
+      return null;
+    }
+
+    return {
+      id: corporationId,
+      name: corpInfo.name,
+    };
+  } catch (error) {
+    console.error('Error searching for corporation:', error);
     return null;
   }
 }

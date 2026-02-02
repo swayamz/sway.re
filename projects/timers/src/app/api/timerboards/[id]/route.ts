@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission, isSiteAdmin } from '@/lib/auth-utils'
+import { hasPermission, isSiteAdmin, hasBoardAccess, getUserRole } from '@/lib/auth-utils'
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -23,22 +23,24 @@ export async function GET(
       return NextResponse.json({ error: 'Authentication incomplete - please sign in again' }, { status: 401 })
     }
 
-    // Check if user has access to this timerboard
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-      include: {
-        timerboard: true,
-      },
-    })
+    // Check if user has access to this timerboard (individual or corporation-based)
+    const hasAccess = await hasBoardAccess(userId, timerboardId)
 
-    if (!userTimerboard) {
+    if (!hasAccess) {
       return NextResponse.json({ error: 'Timerboard not found' }, { status: 404 })
     }
+
+    // Get the timerboard details
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
+    })
+
+    if (!timerboard) {
+      return NextResponse.json({ error: 'Timerboard not found' }, { status: 404 })
+    }
+
+    // Get user's effective role (considering both individual and corporation access)
+    const userRole = await getUserRole(userId, timerboardId)
 
     // Get all timers (including expired ones for past timers view)
     const timers = await prisma.timer.findMany({
@@ -59,10 +61,10 @@ export async function GET(
 
     return NextResponse.json({
       timerboard: {
-        id: userTimerboard.timerboard.id,
-        name: userTimerboard.timerboard.name,
-        description: userTimerboard.timerboard.description,
-        userRole: userTimerboard.role,
+        id: timerboard.id,
+        name: timerboard.name,
+        description: timerboard.description,
+        userRole: userRole || 'USER',
       },
       timers: timers.map((timer: any) => ({
         id: timer.id,

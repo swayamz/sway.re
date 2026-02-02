@@ -151,7 +151,7 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -159,7 +159,13 @@ export async function GET(
     const userId = (session.user as any).userId
     const timerboardId = params.id
 
-    // Check if user has access to this timerboard
+    // Get user's corporation for corporation-based access check
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { corporationId: true },
+    })
+
+    // Check if user has direct access to this timerboard
     const userAccess = await prisma.userTimerboard.findUnique({
       where: {
         userId_timerboardId: {
@@ -169,9 +175,23 @@ export async function GET(
       },
     })
 
-    if (!userAccess) {
-      return NextResponse.json({ 
-        error: 'Timerboard not found or access denied' 
+    // Check if user has corporation-based access
+    let hasCorporationAccess = false
+    if (currentUser?.corporationId) {
+      const corpAccess = await prisma.timerboardCorporation.findUnique({
+        where: {
+          timerboardId_corporationId: {
+            timerboardId,
+            corporationId: currentUser.corporationId,
+          },
+        },
+      })
+      hasCorporationAccess = !!corpAccess
+    }
+
+    if (!userAccess && !hasCorporationAccess) {
+      return NextResponse.json({
+        error: 'Timerboard not found or access denied'
       }, { status: 404 })
     }
 

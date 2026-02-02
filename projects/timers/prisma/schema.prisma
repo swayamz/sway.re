@@ -19,15 +19,16 @@ model User {
   corporationId Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   // User roles
   isAdmin       Boolean  @default(false)
-  
+
   // Relations
-  timerboards   UserTimerboard[]
-  addedTimers   Timer[]
-  auditLogs     AuditLog[]
-  
+  timerboards          UserTimerboard[]
+  addedTimers          Timer[]
+  auditLogs            AuditLog[]
+  addedCorporations    TimerboardCorporation[]
+
   @@map("users")
 }
 
@@ -40,12 +41,13 @@ model Timerboard {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdBy   String
-  
+
   // Relations
-  users       UserTimerboard[]
-  timers      Timer[]
-  auditLogs   AuditLog[]
-  
+  users        UserTimerboard[]
+  corporations TimerboardCorporation[]
+  timers       Timer[]
+  auditLogs    AuditLog[]
+
   @@map("timerboards")
 }
 
@@ -101,10 +103,27 @@ model AuditLog {
   action       String     // Using String instead of enum for SQLite compatibility
   details      String     // Store additional details as JSON string
   createdAt    DateTime   @default(now())
-  
+
   // Relations
   timerboard   Timerboard? @relation(fields: [timerboardId], references: [id], onDelete: Cascade)
   user         User        @relation(fields: [userId], references: [id])
-  
+
   @@map("audit_logs")
+}
+
+// Corporation access to timerboards
+model TimerboardCorporation {
+  id              String     @id @default(cuid())
+  timerboardId    String
+  corporationId   Int
+  corporationName String     // Cached from ESI
+  role            String     @default("USER") // USER, MODERATOR
+  addedAt         DateTime   @default(now())
+  addedBy         String
+
+  timerboard      Timerboard @relation(fields: [timerboardId], references: [id], onDelete: Cascade)
+  addedByUser     User       @relation(fields: [addedBy], references: [id])
+
+  @@unique([timerboardId, corporationId])
+  @@map("timerboard_corporations")
 }

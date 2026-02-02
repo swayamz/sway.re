@@ -55,6 +55,7 @@ export async function getUserWithPermissions(userId: string) {
 }
 
 export async function getUserRole(userId: string, timerboardId: string): Promise<UserRoleType | null> {
+  // Get user's individual role on the timerboard
   const userTimerboard = await prisma.userTimerboard.findUnique({
     where: {
       userId_timerboardId: {
@@ -64,7 +65,63 @@ export async function getUserRole(userId: string, timerboardId: string): Promise
     },
   })
 
-  return userTimerboard?.role as UserRoleType || null
+  const individualRole = userTimerboard?.role as UserRoleType || null
+
+  // Get user's corporation-based role
+  const corpRole = await getCorporationRole(userId, timerboardId)
+
+  // Return the higher of the two roles
+  if (!individualRole && !corpRole) return null
+  if (!individualRole) return corpRole
+  if (!corpRole) return individualRole
+
+  const roleHierarchy: Record<string, number> = {
+    [UserRole.ADMIN]: 3,
+    [UserRole.MODERATOR]: 2,
+    [UserRole.USER]: 1,
+  }
+
+  return roleHierarchy[individualRole] >= roleHierarchy[corpRole] ? individualRole : corpRole
+}
+
+export async function getCorporationRole(userId: string, timerboardId: string): Promise<UserRoleType | null> {
+  // Get user's corporation ID
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { corporationId: true },
+  })
+
+  if (!user?.corporationId) return null
+
+  // Check if user's corporation has access to this timerboard
+  const corpAccess = await prisma.timerboardCorporation.findUnique({
+    where: {
+      timerboardId_corporationId: {
+        timerboardId,
+        corporationId: user.corporationId,
+      },
+    },
+  })
+
+  return corpAccess?.role as UserRoleType || null
+}
+
+export async function hasBoardAccess(userId: string, timerboardId: string): Promise<boolean> {
+  // Check individual access
+  const userTimerboard = await prisma.userTimerboard.findUnique({
+    where: {
+      userId_timerboardId: {
+        userId,
+        timerboardId,
+      },
+    },
+  })
+
+  if (userTimerboard) return true
+
+  // Check corporation-based access
+  const corpRole = await getCorporationRole(userId, timerboardId)
+  return corpRole !== null
 }
 
 export async function hasPermission(

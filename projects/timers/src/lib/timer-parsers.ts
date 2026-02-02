@@ -137,21 +137,32 @@ export function parseJumpBridge(input: string, owner: string): ParsedTimer | nul
   }
 }
 
-export function parseMercenaryDen(dateInput: string, system: string, planet: string, owner: string): ParsedTimer | null {
+export function parseMercenaryDen(input: string, system: string, planet: string, owner: string): ParsedTimer | null {
   try {
-    // Expected format: "2025.08.26 19:16:49" or "2025.08.26 19:16"
-    const dateMatch = dateInput.trim().match(/^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2})(?::(\d{2}))?$/)
-    
-    if (!dateMatch) {
-      throw new Error('Invalid date format')
+    // Expected format (copy-paste from game):
+    // "Mercenary Den
+    // 611 m
+    // Sec. 5.0
+    // Reinforced until 2026.02.02 18:55:15"
+
+    const lines = input.trim().split('\n').map((line: string) => line.trim()).filter((line: string) => line)
+
+    // Parse reinforced until line
+    let expiresAt: Date | undefined
+    for (const line of lines) {
+      if (line.startsWith('Reinforced until')) {
+        const dateMatch = line.match(/Reinforced until (\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})/)
+        if (dateMatch) {
+          const dateStr = dateMatch[1].replace(/\./g, '-')
+          expiresAt = new Date(dateStr + ' UTC')
+          break
+        }
+      }
     }
 
-    // If seconds are not provided, default to :00
-    const seconds = dateMatch[2] || '00'
-    const fullDateStr = `${dateMatch[1]}:${seconds}`
-    
-    const dateStr = fullDateStr.replace(/\./g, '-')
-    const expiresAt = new Date(dateStr + ' UTC')
+    if (!expiresAt) {
+      throw new Error('Could not parse reinforced until date')
+    }
 
     // Mercenary Dens have a 30-minute active window after the timer expires
     const activeUntil = new Date(expiresAt.getTime() + (30 * 60 * 1000))

@@ -113,6 +113,23 @@ export function useAuditLogs(timerboardId: string | null) {
   })
 }
 
+// Hook to fetch timerboard corporations
+export function useTimerboardCorporations(timerboardId: string | null) {
+  return useQuery({
+    queryKey: ['timerboard-corporations', timerboardId],
+    queryFn: async () => {
+      if (!timerboardId) return null
+      const response = await fetch(`/api/timerboards/${timerboardId}/corporations`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch timerboard corporations')
+      }
+      const data = await response.json()
+      return data.corporations
+    },
+    enabled: !!timerboardId,
+  })
+}
+
 // Hook to fetch regions and campaigns
 export function useCampaigns(timerboardId: string | null) {
   const queryClient = useQueryClient()
@@ -424,6 +441,102 @@ export function useTimerboardMutations() {
     },
   })
 
+  const addCorporation = useMutation({
+    mutationFn: async ({ timerboardId, corporationName, role }: {
+      timerboardId: string;
+      corporationName: string;
+      role: string
+    }) => {
+      const response = await fetch(`/api/timerboards/${timerboardId}/corporations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          corporationName: corporationName.trim(),
+          role,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add corporation')
+      }
+      return data
+    },
+    onMutate: async ({ timerboardId, corporationName, role }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['timerboard-corporations', timerboardId] })
+
+      // Snapshot the previous value
+      const previousCorporations = queryClient.getQueryData(['timerboard-corporations', timerboardId])
+
+      // Optimistically add the new corporation
+      queryClient.setQueryData(['timerboard-corporations', timerboardId], (old: any[]) => {
+        if (!old) return [{ corporationName, role, corporationId: 'temp' }]
+        return [...old, { corporationName, role, corporationId: 'temp' }]
+      })
+
+      return { previousCorporations }
+    },
+    onError: (err, variables, context) => {
+      // Revert the optimistic update on error
+      if (context?.previousCorporations) {
+        queryClient.setQueryData(['timerboard-corporations', variables.timerboardId], context.previousCorporations)
+      }
+    },
+    onSettled: (_, __, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['timerboard-corporations', variables.timerboardId] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', variables.timerboardId] })
+    },
+  })
+
+  const removeCorporation = useMutation({
+    mutationFn: async ({ timerboardId, corporationId }: {
+      timerboardId: string;
+      corporationId: number
+    }) => {
+      const response = await fetch(`/api/timerboards/${timerboardId}/corporations`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          corporationId,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to remove corporation')
+      }
+      return data
+    },
+    onMutate: async ({ timerboardId, corporationId }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['timerboard-corporations', timerboardId] })
+
+      // Snapshot the previous value
+      const previousCorporations = queryClient.getQueryData(['timerboard-corporations', timerboardId])
+
+      // Optimistically remove the corporation
+      queryClient.setQueryData(['timerboard-corporations', timerboardId], (old: any[]) => {
+        if (!old) return old
+        return old.filter((corp: any) => corp.corporationId !== corporationId)
+      })
+
+      return { previousCorporations }
+    },
+    onError: (err, variables, context) => {
+      // Revert the optimistic update on error
+      if (context?.previousCorporations) {
+        queryClient.setQueryData(['timerboard-corporations', variables.timerboardId], context.previousCorporations)
+      }
+    },
+    onSettled: (_, __, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['timerboard-corporations', variables.timerboardId] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', variables.timerboardId] })
+    },
+  })
+
   return {
     deleteTimer,
     repairTimer,
@@ -432,5 +545,7 @@ export function useTimerboardMutations() {
     deleteTimerboard,
     addUser,
     removeUser,
+    addCorporation,
+    removeCorporation,
   }
 }

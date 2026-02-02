@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { AddTimerModal } from '@/components/timers/add-timer-modal'
 import { CampaignsSection } from '@/components/sovereignty/campaigns-section'
+import { CorporationsSection } from '@/components/timerboards/corporations-section'
 import { 
   useTimerboards, 
   useTimerboard, 
@@ -675,6 +676,13 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* Corporation Access Section */}
+            <CorporationsSection
+              timerboardId={selectedTimerboard?.timerboard.id || ''}
+              isModeratorOrAdmin={selectedTimerboard?.timerboard.userRole === 'ADMIN' || selectedTimerboard?.timerboard.userRole === 'MODERATOR'}
+              toast={toast}
+            />
+
             {/* Role Management Section */}
             <div className="space-y-4">
               <h4 className="text-md font-semibold">Role Management</h4>
@@ -786,6 +794,9 @@ export default function HomePage() {
                               {log.action === 'USER_ADDED' && 'added user'}
                               {log.action === 'USER_REMOVED' && 'removed user'}
                               {log.action === 'UPDATE_REGIONS' && 'updated regions'}
+                              {log.action === 'CORPORATION_ADDED' && 'added corporation'}
+                              {log.action === 'CORPORATION_REMOVED' && 'removed corporation'}
+                              {log.action === 'CORPORATION_ROLE_UPDATED' && 'updated corporation role'}
                             </span>
                             {log.details && (
                               <div className="text-gray-400 text-xs mt-1">
@@ -804,6 +815,9 @@ export default function HomePage() {
                                 )}
                                 {log.action === 'UPDATE_REGIONS' && log.details && (
                                   <span>Regions: {log.details.regions?.join(', ') || 'N/A'}</span>
+                                )}
+                                {(log.action === 'CORPORATION_ADDED' || log.action === 'CORPORATION_REMOVED' || log.action === 'CORPORATION_ROLE_UPDATED') && log.details?.corporationName && (
+                                  <span>Corporation: {log.details.corporationName}</span>
                                 )}
                               </div>
                             )}

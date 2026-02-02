@@ -410,13 +410,16 @@ Reinforced until 2025.08.26 19:16:49"
             {structureType === 'MERCENARY_DEN' && (
               <div className="space-y-3">
                 <label className="block">
-                  <span className="text-sm font-medium">Timer date:</span>
-                  <input
-                    type="text"
+                  <span className="text-sm font-medium">Paste from game:</span>
+                  <textarea
                     value={pasteInput}
-                    onChange={(e) => setPasteInput(e.target.value)}
-                    placeholder="2025.09.13 10:32"
-                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono"
+                    onChange={(e) => handlePasteInputChange(e.target.value)}
+                    placeholder="Mercenary Den
+611 m
+Sec. 5.0
+Reinforced until 2026.02.02 18:55:15"
+                    rows={4}
+                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
                   />
                 </label>
                 <label className="block">

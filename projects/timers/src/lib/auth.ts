@@ -1,6 +1,27 @@
 import { NextAuthOptions } from "next-auth"
 import { createOrUpdateUser } from "./auth-utils"
 
+async function getCharacterCorporationId(characterId: number): Promise<number | undefined> {
+  try {
+    const response = await fetch(
+      `https://esi.evetech.net/latest/characters/${characterId}/`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Sway-Timers-App/1.0',
+        },
+      }
+    )
+    if (response.ok) {
+      const data = await response.json()
+      return data.corporation_id
+    }
+  } catch (error) {
+    console.error('Error fetching character corporation:', error)
+  }
+  return undefined
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     {
@@ -32,16 +53,20 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account, profile }) {
       // Store additional EVE character data in JWT
       if (account && profile) {
-        token.characterId = (profile as any).CharacterID
+        const characterId = (profile as any).CharacterID
+        token.characterId = characterId
         token.characterName = (profile as any).CharacterName
-        token.corporationId = (profile as any).CorporationID
+
+        // Fetch corporation ID from ESI (not provided by SSO verify endpoint)
+        const corporationId = await getCharacterCorporationId(characterId)
+        token.corporationId = corporationId
 
         // Create or update user in database
         try {
           const user = await createOrUpdateUser({
-            characterId: (profile as any).CharacterID,
+            characterId: characterId,
             characterName: (profile as any).CharacterName,
-            corporationId: (profile as any).CorporationID,
+            corporationId: corporationId,
           })
           token.userId = user.id
           token.isAdmin = user.isAdmin
