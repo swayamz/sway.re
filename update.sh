@@ -4,23 +4,13 @@
 # Usage: ./update.sh [service_name]
 # Example: ./update.sh timers (updates only timers service)
 # Example: ./update.sh (updates all services)
-#
-# Environment variables:
-#   BUILD_CPU_LIMIT - Max CPU cores for builds (default: 50% of available cores)
-#   Example: BUILD_CPU_LIMIT=1 ./update.sh timers
 
 set -e
 
 # Parse arguments
 SERVICE_NAME=${1:-""}
 
-# CPU limit for builds (default: 50% of available cores, minimum 1)
-TOTAL_CPUS=$(nproc 2>/dev/null || echo 2)
-DEFAULT_CPU_LIMIT=$(echo "scale=1; $TOTAL_CPUS * 0.5" | bc 2>/dev/null || echo 1)
-BUILD_CPU_LIMIT=${BUILD_CPU_LIMIT:-$DEFAULT_CPU_LIMIT}
-
 echo "🔄 Starting low-downtime update for Sway hosting platform..."
-echo "   Build CPU limit: $BUILD_CPU_LIMIT cores (set BUILD_CPU_LIMIT to override)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -95,27 +85,10 @@ rolling_update() {
     fi
     
     # Build new image first (without disrupting running service)
-    # Use CPU limits to prevent system freeze during build
-    log_info "Building new image for $service_name (CPU limit: $BUILD_CPU_LIMIT cores)..."
-
-    # Get build context path for the service
-    local build_context="./projects/$service_name"
-    local dockerfile="$build_context/Dockerfile"
-    local image_name="sway-$service_name"
-
-    if [ -f "$dockerfile" ]; then
-        # Use docker build directly with CPU limits
-        if ! docker build --cpus="$BUILD_CPU_LIMIT" -t "$image_name" "$build_context"; then
-            log_error "Failed to build new image for $service_name"
-            return 1
-        fi
-    else
-        # Fallback to docker-compose build if custom Dockerfile location
-        log_warning "Using docker-compose build (no CPU limit) - Dockerfile not at expected location"
-        if ! docker-compose build $service_name; then
-            log_error "Failed to build new image for $service_name"
-            return 1
-        fi
+    log_info "Building new image for $service_name..."
+    if ! docker-compose build $service_name; then
+        log_error "Failed to build new image for $service_name"
+        return 1
     fi
     
     # Get current container ID
