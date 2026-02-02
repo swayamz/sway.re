@@ -28,7 +28,8 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     existingTimer: { id: string, expiresAt: string, createdAt: string }
   } | null>(null)
   const [pendingTimerData, setPendingTimerData] = useState<any>(null)
-  
+  const [skyhookPaste, setSkyhookPaste] = useState('')
+
   const queryClient = useQueryClient()
 
   if (!isOpen) return null
@@ -42,6 +43,19 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     setLayer('')
     setSystem('')
     setPlanet('')
+    setSkyhookPaste('')
+  }
+
+  // Handle skyhook paste to extract system and planet for Mercenary Den
+  const handleSkyhookPaste = (value: string) => {
+    setSkyhookPaste(value)
+
+    // Parse: "Orbital Skyhook (93PI-4 I) [Best Friends Forever]"
+    const match = value.match(/Orbital Skyhook \(([A-Z0-9\-]+)\s+([IVXLCDM]+|\d+)\)/i)
+    if (match) {
+      setSystem(match[1])
+      setPlanet(match[2])
+    }
   }
 
   // Handle paste input changes and detect anchoring structures
@@ -201,6 +215,7 @@ export function AddTimerModal({ isOpen, onClose, timerboardId, onTimerAdded, toa
     setNotes('')
     setError('')
     setLoading(false)
+    setSkyhookPaste('')
     setDuplicateError(null)
     setPendingTimerData(null)
     onClose()
@@ -419,6 +434,17 @@ Reinforced until 2025.08.26 19:16:49"
 Sec. 5.0
 Reinforced until 2026.02.02 18:55:15"
                     rows={4}
+                    className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-400">Paste Skyhook to auto-fill system/planet (optional):</span>
+                  <textarea
+                    value={skyhookPaste}
+                    onChange={(e) => handleSkyhookPaste(e.target.value)}
+                    placeholder="Orbital Skyhook (93PI-4 I) [Best Friends Forever]
+4,966 km"
+                    rows={2}
                     className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
                   />
                 </label>

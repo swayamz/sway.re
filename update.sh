@@ -86,7 +86,7 @@ rolling_update() {
     
     # Build new image first (without disrupting running service)
     log_info "Building new image for $service_name..."
-    if ! docker-compose build --no-cache $service_name; then
+    if ! docker-compose build $service_name; then
         log_error "Failed to build new image for $service_name"
         return 1
     fi
