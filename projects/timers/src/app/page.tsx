@@ -20,6 +20,7 @@ import {
 import { LoadingSpinner, InlineLoading } from '@/components/ui/loading-spinner'
 import { LiveIndicator, RefreshingIndicator } from '@/components/ui/live-indicator'
 import { ToastContainer, useToast } from '@/components/ui/toast'
+import { UserAutocomplete } from '@/components/ui/user-autocomplete'
 
 interface TimerboardSelectionProps {
   timerboards: any[]
@@ -609,13 +610,12 @@ export default function HomePage() {
                 )}
                 <div className="space-y-3">
                   <div className="flex space-x-3">
-                    <input
-                      type="text"
-                      placeholder="Enter EVE character name"
+                    <UserAutocomplete
                       value={newUserName}
-                      onChange={(e) => setNewUserName(e.target.value)}
-                      className="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                      onChange={setNewUserName}
+                      placeholder="Enter EVE character name"
                       disabled={addUser.isPending}
+                      className="flex-1"
                     />
                     <select
                       value={newUserRole}

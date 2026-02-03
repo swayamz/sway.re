@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canAddTimer } from '@/lib/auth-utils'
+import { canDeleteTimer } from '@/lib/auth-utils'
 
 export async function DELETE(
   request: NextRequest,
@@ -29,31 +29,12 @@ export async function DELETE(
     }
 
     // Check if user has permission to delete timers on this timerboard
-    // For deletion, we need at least moderator permissions
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId: timer.timerboardId,
-        },
-      },
-      include: {
-        user: true
-      }
-    })
+    // For deletion, we need at least moderator permissions (via direct or corporation access)
+    const hasDeletePermission = await canDeleteTimer(userId, timer.timerboardId)
 
-    if (!userTimerboard) {
-      return NextResponse.json({ 
-        error: 'You do not have access to this timerboard' 
-      }, { status: 403 })
-    }
-
-    // Check if user has appropriate role (ADMIN site-wide, or MODERATOR on this timerboard)
-    const hasDeletePermission = userTimerboard.user.isAdmin || userTimerboard.role === 'MODERATOR'
-    
     if (!hasDeletePermission) {
-      return NextResponse.json({ 
-        error: 'You do not have permission to delete timers on this timerboard' 
+      return NextResponse.json({
+        error: 'You do not have permission to delete timers on this timerboard'
       }, { status: 403 })
     }
 

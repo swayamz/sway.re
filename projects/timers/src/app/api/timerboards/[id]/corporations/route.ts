@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { searchCorporation } from '@/lib/esi'
+import { canModerateTimerboard, hasBoardAccess } from '@/lib/auth-utils'
 
 export async function GET(
   request: NextRequest,
@@ -18,17 +19,10 @@ export async function GET(
     const userId = (session.user as any).userId
     const timerboardId = params.id
 
-    // Check if user has access to this timerboard
-    const userAccess = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-    })
+    // Check if user has access to this timerboard (direct or corporation-based)
+    const hasAccess = await hasBoardAccess(userId, timerboardId)
 
-    if (!userAccess) {
+    if (!hasAccess) {
       return NextResponse.json({
         error: 'Timerboard not found or access denied'
       }, { status: 404 })
@@ -88,27 +82,19 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Check if current user has permission to add corporations to this timerboard
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-      include: {
-        user: true
-      }
+    // Check if timerboard exists
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
     })
 
-    if (!userTimerboard) {
+    if (!timerboard) {
       return NextResponse.json({
-        error: 'Timerboard not found or access denied'
+        error: 'Timerboard not found'
       }, { status: 404 })
     }
 
-    // Check if user has permission (ADMIN site-wide, or MODERATOR on this timerboard)
-    const hasPermission = userTimerboard.user.isAdmin || userTimerboard.role === 'MODERATOR'
+    // Check if user has permission (site admin, or MODERATOR on this timerboard via direct or corporation access)
+    const hasPermission = await canModerateTimerboard(userId, timerboardId)
 
     if (!hasPermission) {
       return NextResponse.json({
@@ -223,27 +209,19 @@ export async function DELETE(
       }, { status: 400 })
     }
 
-    // Check if current user has permission to remove corporations from this timerboard
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-      include: {
-        user: true
-      }
+    // Check if timerboard exists
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
     })
 
-    if (!userTimerboard) {
+    if (!timerboard) {
       return NextResponse.json({
-        error: 'Timerboard not found or access denied'
+        error: 'Timerboard not found'
       }, { status: 404 })
     }
 
-    // Check if user has permission (ADMIN site-wide, or MODERATOR on this timerboard)
-    const hasPermission = userTimerboard.user.isAdmin || userTimerboard.role === 'MODERATOR'
+    // Check if user has permission (site admin, or MODERATOR on this timerboard via direct or corporation access)
+    const hasPermission = await canModerateTimerboard(userId, timerboardId)
 
     if (!hasPermission) {
       return NextResponse.json({

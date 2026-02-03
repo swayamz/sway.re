@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { canManageUsers, hasBoardAccess } from '@/lib/auth-utils'
 
 export async function POST(
   request: NextRequest,
@@ -24,33 +25,30 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Check if current user has permission to add users to this timerboard
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-      include: {
-        user: true
-      }
+    // Check if timerboard exists
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
     })
 
-    if (!userTimerboard) {
-      return NextResponse.json({ 
-        error: 'Timerboard not found or access denied' 
+    if (!timerboard) {
+      return NextResponse.json({
+        error: 'Timerboard not found'
       }, { status: 404 })
     }
 
-    // Check if user has permission (ADMIN site-wide, or MODERATOR on this timerboard)
-    const hasPermission = userTimerboard.user.isAdmin || userTimerboard.role === 'MODERATOR'
-    
+    // Check if user has permission (site admin, or MODERATOR on this timerboard via direct or corporation access)
+    const hasPermission = await canManageUsers(userId, timerboardId)
+
     if (!hasPermission) {
-      return NextResponse.json({ 
-        error: 'You do not have permission to add users to this timerboard' 
+      return NextResponse.json({
+        error: 'You do not have permission to add users to this timerboard'
       }, { status: 403 })
     }
+
+    // Get current user info for permission checks below
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+    })
 
     // Find the user by character name
     const targetUser = await prisma.user.findFirst({
@@ -79,14 +77,9 @@ export async function POST(
     })
 
     // Add user to timerboard with specified role (default to USER)
+    // Note: canManageUsers already verified the user is a site admin or moderator,
+    // so they can assign any role including MODERATOR
     const validRole = role && ['USER', 'MODERATOR'].includes(role) ? role : 'USER'
-    
-    // Site admins can assign any role, moderators can assign MODERATOR or USER roles
-    if (validRole === 'MODERATOR' && !userTimerboard.user.isAdmin && userTimerboard.role !== 'MODERATOR') {
-      return NextResponse.json({ 
-        error: 'Only site administrators and moderators can assign moderator roles' 
-      }, { status: 403 })
-    }
 
     let auditAction = 'USER_ADDED'
     let successMessage = `Successfully added ${characterName} to timerboard with ${validRole} role`
@@ -159,37 +152,10 @@ export async function GET(
     const userId = (session.user as any).userId
     const timerboardId = params.id
 
-    // Get user's corporation for corporation-based access check
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { corporationId: true },
-    })
+    // Check if user has access to this timerboard (direct or corporation-based)
+    const hasAccess = await hasBoardAccess(userId, timerboardId)
 
-    // Check if user has direct access to this timerboard
-    const userAccess = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-    })
-
-    // Check if user has corporation-based access
-    let hasCorporationAccess = false
-    if (currentUser?.corporationId) {
-      const corpAccess = await prisma.timerboardCorporation.findUnique({
-        where: {
-          timerboardId_corporationId: {
-            timerboardId,
-            corporationId: currentUser.corporationId,
-          },
-        },
-      })
-      hasCorporationAccess = !!corpAccess
-    }
-
-    if (!userAccess && !hasCorporationAccess) {
+    if (!hasAccess) {
       return NextResponse.json({
         error: 'Timerboard not found or access denied'
       }, { status: 404 })
@@ -248,33 +214,30 @@ export async function DELETE(
       }, { status: 400 })
     }
 
-    // Check if current user has permission to remove users from this timerboard
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId,
-          timerboardId,
-        },
-      },
-      include: {
-        user: true
-      }
+    // Check if timerboard exists
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
     })
 
-    if (!userTimerboard) {
-      return NextResponse.json({ 
-        error: 'Timerboard not found or access denied' 
+    if (!timerboard) {
+      return NextResponse.json({
+        error: 'Timerboard not found'
       }, { status: 404 })
     }
 
-    // Check if user has permission (ADMIN site-wide, or MODERATOR on this timerboard)
-    const hasPermission = userTimerboard.user.isAdmin || userTimerboard.role === 'MODERATOR'
-    
+    // Check if user has permission (site admin, or MODERATOR on this timerboard via direct or corporation access)
+    const hasPermission = await canManageUsers(userId, timerboardId)
+
     if (!hasPermission) {
-      return NextResponse.json({ 
-        error: 'You do not have permission to remove users from this timerboard' 
+      return NextResponse.json({
+        error: 'You do not have permission to remove users from this timerboard'
       }, { status: 403 })
     }
+
+    // Get current user info for permission checks below
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+    })
 
     // Find the user to be removed by character name
     const targetUser = await prisma.user.findFirst({
@@ -309,9 +272,9 @@ export async function DELETE(
     }
 
     // Prevent removing site admins (unless remover is also site admin)
-    if (targetUser.isAdmin && !userTimerboard.user.isAdmin) {
-      return NextResponse.json({ 
-        error: 'Cannot remove site administrators' 
+    if (targetUser.isAdmin && !currentUser?.isAdmin) {
+      return NextResponse.json({
+        error: 'Cannot remove site administrators'
       }, { status: 403 })
     }
 

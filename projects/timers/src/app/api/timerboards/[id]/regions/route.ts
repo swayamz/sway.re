@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { canModerateTimerboard, hasBoardAccess } from '@/lib/auth-utils';
 
 export async function GET(
   request: NextRequest,
@@ -15,24 +16,25 @@ export async function GET(
     }
 
     const timerboardId = params.id;
+    const userId = (session.user as any).userId;
 
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId: (session.user as any).userId,
-          timerboardId: timerboardId,
-        },
-      },
-      include: {
-        timerboard: true,
-      },
+    // Check if user has access to this timerboard (direct or corporation-based)
+    const hasAccess = await hasBoardAccess(userId, timerboardId);
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Timerboard not found or access denied' }, { status: 404 });
+    }
+
+    const timerboard = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
+      select: { regions: true },
     });
 
-    if (!userTimerboard) {
+    if (!timerboard) {
       return NextResponse.json({ error: 'Timerboard not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ regions: userTimerboard.timerboard.regions });
+    return NextResponse.json({ regions: timerboard.regions });
   } catch (error) {
     console.error('Error fetching timerboard regions:', error);
     return NextResponse.json(
@@ -54,29 +56,26 @@ export async function PUT(
     }
 
     const timerboardId = params.id;
+    const userId = (session.user as any).userId;
     const { regions } = await request.json();
 
     if (!Array.isArray(regions)) {
       return NextResponse.json({ error: 'Regions must be an array' }, { status: 400 });
     }
 
-    const userTimerboard = await prisma.userTimerboard.findUnique({
-      where: {
-        userId_timerboardId: {
-          userId: (session.user as any).userId,
-          timerboardId: timerboardId,
-        },
-      },
-      include: {
-        user: true,
-      },
+    // Check if timerboard exists
+    const timerboardExists = await prisma.timerboard.findUnique({
+      where: { id: timerboardId },
     });
 
-    if (!userTimerboard) {
+    if (!timerboardExists) {
       return NextResponse.json({ error: 'Timerboard not found' }, { status: 404 });
     }
 
-    if (userTimerboard.role !== 'MODERATOR' && !userTimerboard.user.isAdmin) {
+    // Check if user has moderator permission (site admin, or MODERATOR via direct or corporation access)
+    const hasPermission = await canModerateTimerboard(userId, timerboardId);
+
+    if (!hasPermission) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
